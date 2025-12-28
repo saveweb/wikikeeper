@@ -1,29 +1,45 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
 	import AdminTokenModal from '$lib/components/AdminTokenModal.svelte';
 
 	let showAdminModal = false;
 	let hasAdminToken = false;
 
-	// Helper function to check if admin token cookie exists
-	function checkAdminToken(): boolean {
-		const cookies = document.cookie.split(';');
-		return cookies.some(c => c.trim().startsWith('admintoken='));
+	// API base URL from environment
+	const API_BASE = browser
+		? (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000')
+		: 'http://localhost:8000';
+
+	// Check admin authentication status via API
+	async function checkAdminToken(): Promise<boolean> {
+		if (!browser) return false;
+
+		try {
+			const response = await fetch(`${API_BASE}/api/auth/check`, {
+				credentials: 'include'
+			});
+			const data = await response.json();
+			return data.authenticated === true;
+		} catch (error) {
+			console.error('Failed to check admin status:', error);
+			return false;
+		}
 	}
 
-	onMount(() => {
+	onMount(async () => {
 		// Check if admin token is set
-		hasAdminToken = checkAdminToken();
+		hasAdminToken = await checkAdminToken();
 	});
 
 	function openAdminModal() {
 		showAdminModal = true;
 	}
 
-	function closeAdminModal() {
+	async function closeAdminModal() {
 		showAdminModal = false;
-		hasAdminToken = checkAdminToken();
+		hasAdminToken = await checkAdminToken();
 	}
 </script>
 
