@@ -102,7 +102,7 @@
 	<footer class="bg-white mt-auto">
 		<div class="mx-auto max-w-7xl py-6 px-4 sm:px-6 lg:px-8">
 			<p class="text-center text-sm text-gray-500">
-				WikiKeeper. Tracking MediaWiki sites worldwide.
+				WikiKeeper. by <a href="https://saveweb.org/" class="text-primary-600 hover:underline">Save the Web Project</a>.
 			</p>
 		</div>
 	</footer>
