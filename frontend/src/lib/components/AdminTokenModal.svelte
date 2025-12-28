@@ -1,13 +1,20 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
 
 	export let onClose: () => void;
 
 	let token = '';
 	let message = '';
 
+	// API base URL from environment
+	const API_BASE = browser
+		? (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000')
+		: 'http://localhost:8000';
+
 	// Helper functions to manage admin token cookie
 	function getAdminToken(): string | undefined {
+		if (!browser) return undefined;
 		const cookies = document.cookie.split(';');
 		const adminCookie = cookies.find(c => c.trim().startsWith('admintoken='));
 		if (adminCookie) {
@@ -16,12 +23,10 @@
 		return undefined;
 	}
 
-	function setAdminToken(value: string) {
-		// Set cookie with SameSite=Lax for cross-origin compatibility
-		document.cookie = `admintoken=${value}; path=/; SameSite=Lax`;
-	}
-
+	// Note: We no longer set cookie directly on frontend
+	// Instead, we redirect to API domain's callback endpoint
 	function clearAdminToken() {
+		if (!browser) return;
 		document.cookie = 'admintoken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
 	}
 
@@ -35,11 +40,16 @@
 
 	function saveToken() {
 		if (token.trim()) {
-			setAdminToken(token.trim());
-			message = 'Admin token saved!';
-			setTimeout(() => {
-				onClose();
-			}, 500);
+			// Redirect to API callback endpoint to set cookie
+			// The API will set the cookie on its domain and redirect back
+			const currentUrl = browser ? window.location.href : '/';
+			const callbackUrl = new URL('/api/auth/callback', API_BASE);
+			callbackUrl.searchParams.set('token', token.trim());
+			callbackUrl.searchParams.set('redirect_to', currentUrl);
+
+			if (browser) {
+				window.location.href = callbackUrl.toString();
+			}
 		} else {
 			// Clear token
 			clearAdminToken();

@@ -86,6 +86,7 @@ func main() {
 	wikiHandler := handlers.NewWikiHandler(db, cfg)
 	statsHandler := handlers.NewStatsHandler(db, cfg)
 	adminHandler := handlers.NewAdminHandler(db, cfg)
+	authHandler := handlers.NewAuthHandler(cfg)
 
 	// Routes
 	e.GET("/", func(c echo.Context) error {
@@ -101,6 +102,11 @@ func main() {
 
 	// API routes
 	api := e.Group("/api")
+
+	// Auth callback endpoint (for cross-domain cookie setting)
+	api.GET("/auth/callback", authHandler.Callback)
+	// Auth check endpoint (for verifying authentication status)
+	api.GET("/auth/check", authHandler.Check)
 
 	// Public stats endpoint (no auth required)
 	api.GET("/stats/summary", statsHandler.Summary)
