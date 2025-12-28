@@ -32,7 +32,7 @@
 
 			wikis = await wikiStore.load(filters);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to load wikis';
+			error = (e as any)?.detail || (e as Error)?.message || 'Failed to load wikis';
 		} finally {
 			loading = false;
 		}

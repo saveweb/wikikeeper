@@ -45,7 +45,7 @@
 			stats = statsData;
 			archives = archivesData;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load wiki details';
+			error = (err as any)?.detail || (err as Error)?.message || 'Failed to load wiki data';
 		} finally {
 			loading = false;
 		}

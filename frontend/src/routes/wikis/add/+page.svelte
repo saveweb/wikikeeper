@@ -25,7 +25,7 @@
 			// Redirect to wikis list
 			window.location.href = '/wikis';
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to create wiki';
+			error = (err as any)?.detail || (err as Error)?.message || 'Failed to add wiki';
 		} finally {
 			loading = false;
 		}
