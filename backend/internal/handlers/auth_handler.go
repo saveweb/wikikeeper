@@ -57,8 +57,8 @@ func (h *AuthHandler) Callback(c echo.Context) error {
 		Path:     "/",
 		MaxAge:   int(30 * 24 * time.Hour / time.Second), // 30 days
 		HttpOnly: true,
-		Secure:   c.Request().TLS != nil, // Secure only if using HTTPS
-		SameSite: http.SameSiteNoneMode,  // None for cross-origin
+		Secure:   c.Request().TLS != nil || c.Request().Header.Get("X-Forwarded-Proto") == "https", // Secure only if using HTTPS
+		SameSite: http.SameSiteNoneMode,                                                            // None for cross-origin
 	}
 	c.SetCookie(cookie)
 
