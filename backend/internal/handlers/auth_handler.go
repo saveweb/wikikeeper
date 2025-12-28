@@ -64,7 +64,7 @@ func (h *AuthHandler) Callback(c echo.Context) error {
 
 	// Redirect back to frontend
 	if req.RedirectTo != "" {
-		return c.Redirect(http.StatusFound, req.RedirectTo)
+		return c.HTML(http.StatusFound, `<html><head><meta http-equiv="refresh" content="2;url=`+req.RedirectTo+`"></head><body></body></html>`)
 	}
 
 	// Default redirect to root
@@ -86,4 +86,3 @@ func (h *AuthHandler) Check(c echo.Context) error {
 	isAuthenticated := cookie.Value == h.config.AdminToken
 	return c.JSON(http.StatusOK, map[string]bool{"authenticated": isAuthenticated})
 }
-
