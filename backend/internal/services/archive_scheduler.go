@@ -176,22 +176,64 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 		successCount, errorCount, skippedCount, elapsed.Round(time.Second))
 }
 
-// periodicRun runs archive checks on a schedule
+// periodicRun runs archive checks continuously with backoff based on archive_last_check_at
 func (s *ArchiveScheduler) periodicRun(ctx context.Context) {
 	defer s.wg.Done()
 
 	for {
 		select {
-		case <-s.ticker.C:
-			applogger.Log.Info("[ArchiveScheduler] Triggering scheduled archive check")
-			s.wg.Add(1)
-			go s.run(ctx)
 		case <-s.stopCh:
 			applogger.Log.Info("[ArchiveScheduler] Periodic run stopped")
 			return
 		case <-ctx.Done():
 			applogger.Log.Info("[ArchiveScheduler] Context cancelled")
 			return
+		default:
+			// Check the oldest archive_last_check_at before running
+			wikiRepo := repository.NewWikiRepository(s.db)
+			wikis, _, err := wikiRepo.List(ctx, repository.ListOptions{
+				Page:     1,
+				PageSize: 1,
+				Status:   nil,
+				OrderBy:  "archive_last_check_at ASC NULLS FIRST",
+			})
+			if err != nil {
+				applogger.Log.Info("[ArchiveScheduler] Failed to check wikis: %v", err)
+				time.Sleep(10 * time.Second)
+				continue
+			}
+
+			// Check if we need to back off
+			if len(wikis) > 0 && wikis[0].ArchiveLastCheckAt != nil {
+				timeSinceLastCheck := time.Since(*wikis[0].ArchiveLastCheckAt)
+				backoffThreshold := 3 * 24 * time.Hour // 3 days
+
+				if timeSinceLastCheck < backoffThreshold {
+					// Calculate backoff time based on how recent the last check was
+					// More recent = longer backoff (up to 60s max)
+					hoursSinceCheck := timeSinceLastCheck.Hours()
+					var backoffTime time.Duration
+					if hoursSinceCheck < 24 {
+						backoffTime = 60 * time.Second // checked within 24h, max backoff
+					} else if hoursSinceCheck < 48 {
+						backoffTime = 45 * time.Second // checked within 48h
+					} else {
+						backoffTime = 30 * time.Second // checked within 72h
+					}
+					applogger.Log.Info("[ArchiveScheduler] Backing off, recent update detected",
+						"last_check", wikis[0].ArchiveLastCheckAt,
+						"hours_since", hoursSinceCheck,
+						"backoff", backoffTime)
+					time.Sleep(backoffTime)
+					continue
+				}
+			}
+
+			applogger.Log.Info("[ArchiveScheduler] Triggering archive check")
+			s.run(ctx)
+
+			// Small delay to avoid tight loop
+			time.Sleep(1 * time.Second)
 		}
 	}
 }
