@@ -1,5 +1,5 @@
 /**
- * API Client wrapper that automatically adds admin token
+ * API Client wrapper
  */
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -18,23 +18,16 @@ export class ApiClient {
 	}
 
 	private getHeaders(): Record<string, string> {
-		const headers: Record<string, string> = {
+		return {
 			'Content-Type': 'application/json',
 		};
-
-		// Add admin token if available
-		const adminToken = localStorage.getItem('admintoken');
-		if (adminToken) {
-			headers['Cookie'] = `admintoken=${adminToken}`;
-		}
-
-		return headers;
 	}
 
 	async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
 		const url = `${this.baseUrl}${endpoint}`;
 		const config: RequestInit = {
 			method: options.method || 'GET',
+			credentials: 'include',
 			headers: {
 				...this.getHeaders(),
 				...options.headers,

@@ -6,9 +6,15 @@
 	let showAdminModal = false;
 	let hasAdminToken = false;
 
+	// Helper function to check if admin token cookie exists
+	function checkAdminToken(): boolean {
+		const cookies = document.cookie.split(';');
+		return cookies.some(c => c.trim().startsWith('admintoken='));
+	}
+
 	onMount(() => {
 		// Check if admin token is set
-		hasAdminToken = !!localStorage.getItem('admintoken');
+		hasAdminToken = checkAdminToken();
 	});
 
 	function openAdminModal() {
@@ -17,7 +23,7 @@
 
 	function closeAdminModal() {
 		showAdminModal = false;
-		hasAdminToken = !!localStorage.getItem('admintoken');
+		hasAdminToken = checkAdminToken();
 	}
 </script>
 

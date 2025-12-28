@@ -6,9 +6,28 @@
 	let token = '';
 	let message = '';
 
+	// Helper functions to manage admin token cookie
+	function getAdminToken(): string | undefined {
+		const cookies = document.cookie.split(';');
+		const adminCookie = cookies.find(c => c.trim().startsWith('admintoken='));
+		if (adminCookie) {
+			return adminCookie.split('=')[1];
+		}
+		return undefined;
+	}
+
+	function setAdminToken(value: string) {
+		// Set cookie with SameSite=Lax for cross-origin compatibility
+		document.cookie = `admintoken=${value}; path=/; SameSite=Lax`;
+	}
+
+	function clearAdminToken() {
+		document.cookie = 'admintoken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+	}
+
 	onMount(() => {
-		// Load existing token
-		const existing = localStorage.getItem('admintoken');
+		// Load existing token from cookie
+		const existing = getAdminToken();
 		if (existing) {
 			token = existing;
 		}
@@ -16,14 +35,14 @@
 
 	function saveToken() {
 		if (token.trim()) {
-			localStorage.setItem('admintoken', token.trim());
+			setAdminToken(token.trim());
 			message = 'Admin token saved!';
 			setTimeout(() => {
 				onClose();
 			}, 500);
 		} else {
 			// Clear token
-			localStorage.removeItem('admintoken');
+			clearAdminToken();
 			message = 'Admin token cleared';
 			setTimeout(() => {
 				onClose();
@@ -33,7 +52,7 @@
 
 	function clearToken() {
 		token = '';
-		localStorage.removeItem('admintoken');
+		clearAdminToken();
 		message = 'Admin token cleared';
 		setTimeout(() => {
 			message = '';
