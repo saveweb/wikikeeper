@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -128,17 +130,41 @@ func (h *WikiHandler) Create(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"detail": "URL is required"})
 	}
 
-	// Normalize URL using service
-	normalizedURL := services.NormalizeURL(req.URL)
-	if normalizedURL == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"detail": "Invalid URL format"})
+	// Check if URL ends with /api.php
+	rawURL := strings.TrimSpace(req.URL)
+	var apiURL string
+	var wikiURL string
+
+	if strings.HasSuffix(strings.TrimSuffix(rawURL, "/"), "/api.php") {
+		// User provided API URL directly
+		apiURL = strings.TrimSuffix(rawURL, "/")
+		// Wiki URL is the API URL with /api.php removed
+		wikiURL = strings.TrimSuffix(apiURL, "/api.php")
+		// Add trailing slash to indicate it's a directory
+		if !strings.HasSuffix(wikiURL, "/") {
+			wikiURL = wikiURL + "/"
+		}
+		// Ensure scheme
+		if !strings.HasPrefix(wikiURL, "http://") && !strings.HasPrefix(wikiURL, "https://") {
+			wikiURL = "https://" + wikiURL
+		}
+		// Validate URL format
+		if _, err := url.Parse(wikiURL); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"detail": "Invalid URL format"})
+		}
+	} else {
+		// Normal wiki URL, use existing logic
+		wikiURL = services.NormalizeURL(req.URL)
+		if wikiURL == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"detail": "Invalid URL format"})
+		}
 	}
 
 	wikiRepo := repository.NewWikiRepository(h.db)
 	ctx := c.Request().Context()
 
 	// Check if already exists
-	exists, err := wikiRepo.ExistsByURL(ctx, normalizedURL)
+	exists, err := wikiRepo.ExistsByURL(ctx, wikiURL)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"detail": err.Error()})
 	}
@@ -149,11 +175,15 @@ func (h *WikiHandler) Create(c echo.Context) error {
 	// Create wiki
 	wiki := &models.Wiki{
 		ID:     uuid.New(),
-		URL:    normalizedURL,
+		URL:    wikiURL,
 		Status: models.WikiStatusPending,
 	}
 	if req.WikiName != nil {
 		wiki.WikiName = req.WikiName
+	}
+	// If API URL was provided directly, set it
+	if apiURL != "" {
+		wiki.APIURL = &apiURL
 	}
 
 	if err := wikiRepo.Create(ctx, wiki); err != nil {

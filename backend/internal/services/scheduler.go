@@ -167,22 +167,64 @@ func (s *CollectionScheduler) run(ctx context.Context) {
 		"duration", elapsed.Round(time.Second))
 }
 
-// periodicRun runs collection on a schedule
+// periodicRun runs collection continuously with backoff based on last_check_at
 func (s *CollectionScheduler) periodicRun(ctx context.Context) {
 	defer s.wg.Done()
 
 	for {
 		select {
-		case <-s.ticker.C:
-			applogger.Log.Info("triggering scheduled collection")
-			s.wg.Add(1)
-			go s.run(ctx)
 		case <-s.stopCh:
 			applogger.Log.Info("periodic run stopped")
 			return
 		case <-ctx.Done():
 			applogger.Log.Info("context cancelled")
 			return
+		default:
+			// Check the oldest last_check_at before running
+			wikiRepo := repository.NewWikiRepository(s.db)
+			wikis, _, err := wikiRepo.List(ctx, repository.ListOptions{
+				Page:     1,
+				PageSize: 1,
+				Status:   nil,
+				OrderBy:  "last_check_at ASC NULLS FIRST",
+			})
+			if err != nil {
+				applogger.Log.Error("failed to check wikis", "error", err)
+				time.Sleep(10 * time.Second)
+				continue
+			}
+
+			// Check if we need to back off
+			if len(wikis) > 0 && wikis[0].LastCheckAt != nil {
+				timeSinceLastCheck := time.Since(*wikis[0].LastCheckAt)
+				backoffThreshold := 3 * 24 * time.Hour // 3 days
+
+				if timeSinceLastCheck < backoffThreshold {
+					// Calculate backoff time based on how recent the last check was
+					// More recent = longer backoff (up to 60s max)
+					hoursSinceCheck := timeSinceLastCheck.Hours()
+					var backoffTime time.Duration
+					if hoursSinceCheck < 24 {
+						backoffTime = 60 * time.Second // checked within 24h, max backoff
+					} else if hoursSinceCheck < 48 {
+						backoffTime = 45 * time.Second // checked within 48h
+					} else {
+						backoffTime = 30 * time.Second // checked within 72h
+					}
+					applogger.Log.Info("backing off, recent update detected",
+						"last_check", wikis[0].LastCheckAt,
+						"hours_since", hoursSinceCheck,
+						"backoff", backoffTime)
+					time.Sleep(backoffTime)
+					continue
+				}
+			}
+
+			applogger.Log.Info("triggering collection")
+			s.run(ctx)
+
+			// Small delay to avoid tight loop
+			time.Sleep(1 * time.Second)
 		}
 	}
 }
