@@ -139,7 +139,7 @@
 	}
 </script>
 
-<div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4 sm:p-6">
+<div class="bg-white shadow rounded-lg p-4 sm:p-6">
 	<div style="height: {height}px">
 		<canvas bind:this={canvasElement}></canvas>
 	</div>

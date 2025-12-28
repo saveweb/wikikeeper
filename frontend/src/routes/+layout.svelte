@@ -49,7 +49,7 @@
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">
-	<nav class="bg-white shadow-sm dark:bg-gray-800">
+	<nav class="bg-white shadow-sm">
 		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 			<div class="flex justify-between h-16">
 				<div class="flex">
@@ -61,13 +61,13 @@
 					<div class="hidden sm:ml-6 sm:flex sm:space-x-8">
 						<a
 							href="/"
-							class="border-transparent text-gray-900 dark:text-gray-100 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+							class="border-transparent text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
 						>
 							Dashboard
 						</a>
 						<a
 							href="/wikis"
-							class="border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+							class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
 						>
 							Wikis
 						</a>
@@ -76,11 +76,11 @@
 				<div class="flex items-center">
 					<button
 						onclick={openAdminModal}
-						class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+						class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
 						title="Admin Settings"
 					>
 						{#if hasAdminToken}
-							<span class="text-green-600 dark:text-green-400 mr-2">●</span>
+							<span class="text-green-600 mr-2">●</span>
 							Admin
 						{:else}
 							Admin
@@ -99,9 +99,9 @@
 		<slot />
 	</main>
 
-	<footer class="bg-white dark:bg-gray-800 mt-auto">
+	<footer class="bg-white mt-auto">
 		<div class="mx-auto max-w-7xl py-6 px-4 sm:px-6 lg:px-8">
-			<p class="text-center text-sm text-gray-500 dark:text-gray-400">
+			<p class="text-center text-sm text-gray-500">
 				WikiKeeper. Tracking MediaWiki sites worldwide.
 			</p>
 		</div>
