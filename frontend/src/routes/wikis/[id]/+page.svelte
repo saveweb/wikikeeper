@@ -6,6 +6,7 @@
 	import StatusBadge from '$lib/components/wiki/StatusBadge.svelte';
 	import StatsChart from '$lib/components/charts/StatsChart.svelte';
 	import { formatRelativeTime, formatShortDate, formatFileSize } from '$lib/utils/date';
+	import { APP_CONFIG } from '$lib/constants';
 	import type { Wiki, WikiStats, WikiArchive } from '$lib/types';
 
 	let wiki = $state<Wiki | null>(null);
@@ -112,7 +113,7 @@
 			<div class="flex items-start gap-6">
 				<!-- Large Thumbnail -->
 				<img
-					src={`/api/wikis/${wiki.id}/thumbnail`}
+					src={`${APP_CONFIG.apiBaseUrl}/api/wikis/${wiki.id}/thumbnail`}
 					alt={wiki.sitename || wiki.url}
 					class="h-24 w-24 rounded-lg object-cover flex-shrink-0 shadow-lg"
 				/>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import StatusBadge from '$lib/components/wiki/StatusBadge.svelte';
+	import { APP_CONFIG } from '$lib/constants';
 	import type { Wiki, WikiStatus } from '$lib/types';
 
 	interface Props {
@@ -197,7 +198,7 @@
 									<div class="flex items-center gap-4 flex-1 min-w-0">
 										<!-- Thumbnail -->
 										<img
-											src={`/api/wikis/${wiki.id}/thumbnail`}
+											src={`${APP_CONFIG.apiBaseUrl}/api/wikis/${wiki.id}/thumbnail`}
 											alt={wiki.sitename || wiki.url}
 											class="h-12 w-12 rounded object-cover flex-shrink-0"
 										/>

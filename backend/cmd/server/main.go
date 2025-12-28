@@ -71,7 +71,7 @@ func main() {
 
 	// Middleware
 	e.Use(middleware.Recover())
-	e.Use(appmiddleware.PrometheusMiddleware())
+	applogger.Log.Info("CORS allowed origins", "origins", cfg.AllowOrigins)
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     cfg.AllowOrigins,
 		AllowMethods:     []string{echo.GET, echo.POST, echo.DELETE, echo.PUT, echo.OPTIONS},
@@ -79,6 +79,7 @@ func main() {
 		ExposeHeaders:    []string{echo.HeaderContentLength},
 		AllowCredentials: true,
 	}))
+	e.Use(appmiddleware.PrometheusMiddleware())
 
 	// Initialize handlers with database
 	healthHandler := handlers.NewHealthHandler(cfg)
