@@ -9,23 +9,23 @@
 	> = {
 		pending: {
 			label: 'Pending',
-			bgClass: 'bg-yellow-100 dark:bg-yellow-900',
-			textClass: 'text-yellow-800 dark:text-yellow-200'
+			bgClass: 'bg-yellow-100',
+			textClass: 'text-yellow-800'
 		},
 		ok: {
 			label: 'OK',
-			bgClass: 'bg-green-100 dark:bg-green-900',
-			textClass: 'text-green-800 dark:text-green-200'
+			bgClass: 'bg-green-100',
+			textClass: 'text-green-800'
 		},
 		error: {
 			label: 'Error',
-			bgClass: 'bg-red-100 dark:bg-red-900',
-			textClass: 'text-red-800 dark:text-red-200'
+			bgClass: 'bg-red-100',
+			textClass: 'text-red-800'
 		},
 		offline: {
 			label: 'Offline',
-			bgClass: 'bg-gray-100 dark:bg-gray-700',
-			textClass: 'text-gray-800 dark:text-gray-200'
+			bgClass: 'bg-gray-100',
+			textClass: 'text-gray-800'
 		}
 	};
 

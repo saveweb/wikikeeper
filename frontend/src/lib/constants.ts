@@ -3,7 +3,6 @@ export const APP_CONFIG = {
 	appName: import.meta.env.VITE_APP_NAME || 'WikiKeeper',
 	version: import.meta.env.VITE_APP_VERSION || '0.1.0',
 	features: {
-		darkMode: import.meta.env.VITE_ENABLE_DARK_MODE === 'true',
 		archiveCheck: import.meta.env.VITE_ENABLE_ARCHIVE_CHECK === 'true'
 	},
 	pagination: {
