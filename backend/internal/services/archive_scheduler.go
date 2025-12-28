@@ -139,7 +139,7 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 			continue
 		}
 
-		applogger.Log.Info("[ArchiveScheduler] Checking wiki %d/%d: %s", i+1, totalWikis, wiki.URL)
+		applogger.Log.Info("[ArchiveScheduler] Checking wiki", "index", i+1, "total", totalWikis, "url", wiki.URL)
 
 		// Check archives for this wiki
 		apiURL := *wiki.APIURL

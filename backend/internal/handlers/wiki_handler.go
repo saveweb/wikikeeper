@@ -420,7 +420,7 @@ func (h *WikiHandler) CheckArchive(c echo.Context) error {
 			// Update wiki with archive error
 			archiveService.UpdateWikiArchiveError(bgCtx, h.db, id, err)
 		} else {
-			applogger.Log.Info("[Handler] Archive check completed: found=%d, imported=%d, updated=%d", found, imported, updated)
+			applogger.Log.Info("[Handler] Archive check completed", "found", found, "imported", imported, "updated", updated)
 		}
 	}()
 

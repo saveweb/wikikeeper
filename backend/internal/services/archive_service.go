@@ -21,9 +21,9 @@ import (
 
 // ArchiveService checks Archive.org for wiki backups
 type ArchiveService struct {
-	timeout     time.Duration
-	userAgent   string
-	checkDelay  time.Duration // Delay between Archive.org checks
+	timeout    time.Duration
+	userAgent  string
+	checkDelay time.Duration // Delay between Archive.org checks
 }
 
 // NewArchiveService creates a new Archive service instance
@@ -40,31 +40,32 @@ func NewArchiveService(timeout time.Duration, userAgent string, checkDelay float
 
 // ArchiveInfo represents an Archive.org item
 type ArchiveInfo struct {
-	IAIdentifier     string     `json:"ia_identifier"`
-	AddedDate        *time.Time `json:"added_date,omitempty"`
-	DumpDate         *time.Time `json:"dump_date,omitempty"`
-	ItemSize         *int64     `json:"item_size,omitempty"`
-	Uploader         *string    `json:"uploader,omitempty"`
-	Scanner          *string    `json:"scanner,omitempty"`
-	UploadState      *string    `json:"upload_state,omitempty"`
-	HasXMLCurrent    bool       `json:"has_xml_current"`
-	HasXMLHistory    bool       `json:"has_xml_history"`
-	HasImagesDump    bool       `json:"has_images_dump"`
-	HasTitlesList    bool       `json:"has_titles_list"`
-	HasImagesList    bool       `json:"has_images_list"`
-	HasLegacyWikidump bool      `json:"has_legacy_wikidump"`
+	IAIdentifier      string     `json:"ia_identifier"`
+	AddedDate         *time.Time `json:"added_date,omitempty"`
+	DumpDate          *time.Time `json:"dump_date,omitempty"`
+	ItemSize          *int64     `json:"item_size,omitempty"`
+	Uploader          *string    `json:"uploader,omitempty"`
+	Scanner           *string    `json:"scanner,omitempty"`
+	UploadState       *string    `json:"upload_state,omitempty"`
+	HasXMLCurrent     bool       `json:"has_xml_current"`
+	HasXMLHistory     bool       `json:"has_xml_history"`
+	HasImagesDump     bool       `json:"has_images_dump"`
+	HasTitlesList     bool       `json:"has_titles_list"`
+	HasImagesList     bool       `json:"has_images_list"`
+	HasLegacyWikidump bool       `json:"has_legacy_wikidump"`
 }
 
-// ArchiveSearchResult represents Archive.org search response
-type archiveSearchResult struct {
-	Response struct {
-		Docs []struct {
-			Identifier  string `json:"identifier"`
-			AddedDate   string `json:"addeddate"`
-			OriginalURL string `json:"originalurl,omitempty"`
-		} `json:"docs"`
-		NumFound int `json:"numFound"`
-	} `json:"response"`
+// scrapeSearchResult represents Scrape API response
+type scrapeSearchResult struct {
+	Items []struct {
+		Identifier  string `json:"identifier"`
+		AddedDate   string `json:"addeddate,omitempty"`
+		OriginalURL string `json:"originalurl,omitempty"`
+	} `json:"items"`
+	Cursor string `json:"cursor,omitempty"`
+	Error  string `json:"error,omitempty"`
+	Count  int    `json:"count,omitempty"`
+	Total  int    `json:"total,omitempty"`
 }
 
 // ArchiveMetadata represents Archive.org item metadata
@@ -75,7 +76,7 @@ type archiveMetadata struct {
 		UploadState string `json:"upload-state"`
 	} `json:"metadata"`
 	Files []struct {
-		Name string `json:"name"`
+		Name string      `json:"name"`
 		Size interface{} `json:"size"` // Can be int64 or string like "1.2G"
 	} `json:"files"`
 	ItemSize interface{} `json:"item_size"` // Can be int64 or string
@@ -83,7 +84,7 @@ type archiveMetadata struct {
 
 // CheckArchive searches Archive.org for wiki backups
 func (s *ArchiveService) CheckArchive(ctx context.Context, apiURL, indexURL string) ([]*ArchiveInfo, error) {
-	applogger.Log.Info("[Archive] Checking Archive.org for: %s", apiURL)
+	applogger.Log.Info("[Archive] Checking Archive.org for", "api_url", apiURL)
 
 	if apiURL == "" {
 		return nil, fmt.Errorf("API URL is required")
@@ -106,13 +107,15 @@ func (s *ArchiveService) CheckArchive(ctx context.Context, apiURL, indexURL stri
 		apiURLHTTP, apiURLHTTPS, indexURLHTTP, indexURLHTTPS)
 	searchURL := s.buildSearchURL(query)
 
+	applogger.Log.Info("[Archive] Search URL", "url", searchURL)
+
 	// Make search request
 	results, err := s.searchArchive(ctx, searchURL)
 	if err != nil {
 		return nil, fmt.Errorf("archive search failed: %w", err)
 	}
 
-	applogger.Log.Info("[Archive] Found %d results for: %s", len(results), apiURL)
+	applogger.Log.Info("[Archive] Found X results for the apiURL", "x", len(results), "api_url", apiURL)
 
 	var archives []*ArchiveInfo
 
@@ -120,7 +123,7 @@ func (s *ArchiveService) CheckArchive(ctx context.Context, apiURL, indexURL stri
 	for _, result := range results {
 		info, err := s.parseArchiveItem(ctx, result)
 		if err != nil {
-			applogger.Log.Info("[Archive] Failed to parse item %s: %v", result.Identifier, err)
+			applogger.Log.Info("[Archive] Failed to parse item", "identifier", result.Identifier, "error", err)
 			continue
 		}
 
@@ -153,19 +156,19 @@ func (s *ArchiveService) CollectArchives(ctx context.Context, db *gorm.DB, wikiI
 	for _, archiveInfo := range archives {
 		// Convert ArchiveInfo to WikiArchive model
 		wikiArchive := &models.WikiArchive{
-			WikiID:           wikiID,
-			IAIdentifier:     archiveInfo.IAIdentifier,
-			AddedDate:        archiveInfo.AddedDate,
-			DumpDate:         archiveInfo.DumpDate,
-			ItemSize:         archiveInfo.ItemSize,
-			Uploader:         archiveInfo.Uploader,
-			Scanner:          archiveInfo.Scanner,
-			UploadState:      archiveInfo.UploadState,
-			HasXMLCurrent:    archiveInfo.HasXMLCurrent,
-			HasXMLHistory:    archiveInfo.HasXMLHistory,
-			HasImagesDump:    archiveInfo.HasImagesDump,
-			HasTitlesList:    archiveInfo.HasTitlesList,
-			HasImagesList:    archiveInfo.HasImagesList,
+			WikiID:            wikiID,
+			IAIdentifier:      archiveInfo.IAIdentifier,
+			AddedDate:         archiveInfo.AddedDate,
+			DumpDate:          archiveInfo.DumpDate,
+			ItemSize:          archiveInfo.ItemSize,
+			Uploader:          archiveInfo.Uploader,
+			Scanner:           archiveInfo.Scanner,
+			UploadState:       archiveInfo.UploadState,
+			HasXMLCurrent:     archiveInfo.HasXMLCurrent,
+			HasXMLHistory:     archiveInfo.HasXMLHistory,
+			HasImagesDump:     archiveInfo.HasImagesDump,
+			HasTitlesList:     archiveInfo.HasTitlesList,
+			HasImagesList:     archiveInfo.HasImagesList,
 			HasLegacyWikidump: archiveInfo.HasLegacyWikidump,
 		}
 
@@ -234,54 +237,100 @@ func (s *ArchiveService) UpdateWikiArchiveError(ctx context.Context, db *gorm.DB
 	}
 }
 
-// buildSearchURL constructs Archive.org Advanced Search URL
+// buildSearchURL constructs Archive.org Scrape API URL
 func (s *ArchiveService) buildSearchURL(query string) string {
-	// URL encode the query
+	// Use Scrape API instead of Advanced Search API
+	// Scrape API uses cursor-based pagination and returns all results
 	encodedQuery := url.QueryEscape(query)
-
-	// Build URL manually to preserve [] in parameter names
-	return fmt.Sprintf("https://archive.org/advancedsearch.php?q=%s&fl[]=identifier&fl[]=addeddate&fl[]=originalurl&sort[]=addeddate+desc&rows[]=100&output=json",
+	return fmt.Sprintf("https://archive.org/services/search/v1/scrape?q=%s&fields=identifier,addeddate,originalurl&sorts=addeddate desc",
 		encodedQuery)
 }
 
-// searchArchive performs Archive.org search
+// searchArchive performs Archive.org search using Scrape API with cursor pagination
 func (s *ArchiveService) searchArchive(ctx context.Context, searchURL string) ([]archiveSearchResultDoc, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", searchURL, nil)
-	if err != nil {
-		return nil, err
+	const maxResults = 100 // Maximum number of archives to fetch
+	var allDocs []archiveSearchResultDoc
+	cursor := ""
+	query := "" // Extract query from searchURL for pagination
+
+	// Extract query from URL for pagination
+	if idx := strings.Index(searchURL, "?q="); idx > 0 {
+		queryPart := searchURL[idx+3:]
+		if idx := strings.Index(queryPart, "&"); idx > 0 {
+			query = queryPart[:idx]
+		}
 	}
 
-	req.Header.Set("User-Agent", s.userAgent)
+	applogger.Log.Info("[Archive] Extracted query", "query", query)
 
-	client := &http.Client{Timeout: s.timeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	for {
+		// Build URL with query parameters for POST request
+		baseURL := "https://archive.org/services/search/v1/scrape"
+		params := url.Values{}
+		params.Set("q", query)
+		params.Set("fields", "identifier,addeddate,originalurl")
+		params.Set("sorts", "addeddate desc")
+		if cursor != "" {
+			params.Set("cursor", cursor)
+		}
+
+		fullURL := baseURL + "?" + params.Encode()
+
+		req, err := http.NewRequestWithContext(ctx, "POST", fullURL, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("User-Agent", s.userAgent)
+
+		client := &http.Client{Timeout: s.timeout}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("HTTP request failed: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+		}
+
+		var result scrapeSearchResult
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return nil, fmt.Errorf("JSON decode failed: %w", err)
+		}
+
+		// Check for error
+		if result.Error != "" {
+			return nil, fmt.Errorf("archive API error: %s", result.Error)
+		}
+
+		// Convert items to our format
+		for _, item := range result.Items {
+			allDocs = append(allDocs, archiveSearchResultDoc{
+				Identifier:  item.Identifier,
+				AddedDate:   item.AddedDate,
+				OriginalURL: item.OriginalURL,
+			})
+		}
+
+		// Check if we've reached the max results limit
+		if len(allDocs) >= maxResults {
+			applogger.Log.Info("[Archive] Reached max results limit", "max", maxResults)
+			break
+		}
+
+		// Check if there's a cursor for next page
+		cursor = result.Cursor
+		if cursor == "" {
+			// No more results
+			break
+		}
+
+		applogger.Log.Info("[Archive] Fetched batch", "items", len(result.Items), "has_cursor", true)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-
-	var result archiveSearchResult
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("JSON decode failed: %w", err)
-	}
-
-	applogger.Log.Info("[Archive] Search result: numFound=%d", result.Response.NumFound)
-
-	// Convert to simple format
-	var docs []archiveSearchResultDoc
-	for _, doc := range result.Response.Docs {
-		docs = append(docs, archiveSearchResultDoc{
-			Identifier:  doc.Identifier,
-			AddedDate:   doc.AddedDate,
-			OriginalURL: doc.OriginalURL,
-		})
-	}
-
-	return docs, nil
+	applogger.Log.Info("[Archive] Search result", "total_found", len(allDocs))
+	return allDocs, nil
 }
 
 type archiveSearchResultDoc struct {
