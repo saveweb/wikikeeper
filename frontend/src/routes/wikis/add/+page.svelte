@@ -62,7 +62,7 @@
 						class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
 					/>
 					<p class="mt-2 text-sm text-gray-500">
-						The base URL of the MediaWiki site (e.g., https://en.wikipedia.org/)
+						The base URL of the MediaWiki site (e.g., https://en.wikipedia.org/) Or the API endpoint (e.g., https://en.wikipedia.org/w/api.php)
 					</p>
 				</div>
 			</div>
