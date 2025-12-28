@@ -62,13 +62,7 @@ func (h *AuthHandler) Callback(c echo.Context) error {
 	}
 	c.SetCookie(cookie)
 
-	// Redirect back to frontend
-	if req.RedirectTo != "" {
-		return c.HTML(http.StatusFound, `<html><head><meta http-equiv="refresh" content="2;url=`+req.RedirectTo+`"></head><body></body></html>`)
-	}
-
-	// Default redirect to root
-	return c.Redirect(http.StatusFound, "/")
+	return c.HTML(http.StatusOK, `<html><head><meta http-equiv="refresh" content="2;url=`+req.RedirectTo+`"></head><body></body></html>`)
 }
 
 // Check handles GET /api/auth/check
