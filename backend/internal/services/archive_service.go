@@ -71,9 +71,9 @@ type scrapeSearchResult struct {
 // ArchiveMetadata represents Archive.org item metadata
 type archiveMetadata struct {
 	Metadata struct {
-		Uploader    string `json:"uploader"`
-		Scanner     string `json:"scanner"`
-		UploadState string `json:"upload-state"`
+		Uploader    string      `json:"uploader"`
+		Scanner     interface{} `json:"scanner"` // Can be string or array of strings
+		UploadState string      `json:"upload-state"`
 	} `json:"metadata"`
 	Files []struct {
 		Name string      `json:"name"`
@@ -375,9 +375,31 @@ func (s *ArchiveService) parseArchiveItem(ctx context.Context, result archiveSea
 	if metadata.Metadata.Uploader != "" {
 		info.Uploader = &metadata.Metadata.Uploader
 	}
-	if metadata.Metadata.Scanner != "" {
-		info.Scanner = &metadata.Metadata.Scanner
+
+	// Scanner can be string or array of strings
+	if metadata.Metadata.Scanner != nil {
+		switch v := metadata.Metadata.Scanner.(type) {
+		case string:
+			if v != "" {
+				info.Scanner = &v
+			}
+		case []interface{}:
+			if len(v) > 0 {
+				// Join all scanner values with "; "
+				var scannerParts []string
+				for _, item := range v {
+					if scannerStr, ok := item.(string); ok && scannerStr != "" {
+						scannerParts = append(scannerParts, scannerStr)
+					}
+				}
+				if len(scannerParts) > 0 {
+					joinedScanner := strings.Join(scannerParts, "; ")
+					info.Scanner = &joinedScanner
+				}
+			}
+		}
 	}
+
 	if metadata.Metadata.UploadState != "" {
 		info.UploadState = &metadata.Metadata.UploadState
 	}
