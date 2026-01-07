@@ -10,6 +10,11 @@ var (
 	Log *slog.Logger
 )
 
+func init() {
+	// Initialize logger with INFO level by default (for tests)
+	Init("DEBUG")
+}
+
 // Init initializes the global logger
 func Init(level string) {
 	// Parse log level
