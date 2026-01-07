@@ -31,7 +31,7 @@ func NewCollectorService(db *gorm.DB, mwService *MediaWikiService, cfg *config.C
 
 // CollectSingleWiki collects stats for a single wiki
 func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UUID) error {
-	applogger.Log.Info("[Collector] Starting collection for wiki %s", wikiID)
+	applogger.Log.Info("[Collector] Starting collection for wiki", "wiki_id", wikiID)
 
 	// Get wiki from database
 	wikiRepo := repository.NewWikiRepository(s.db)
@@ -48,7 +48,7 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 
 	// If API URL exists, try using it directly first
 	if wiki.APIURL != nil && wiki.IndexURL != nil {
-		applogger.Log.Info("[Collector] Using existing API URL: %s", *wiki.APIURL)
+		applogger.Log.Info("[Collector] Using existing API URL", "api_url", *wiki.APIURL)
 		client = s.mwService.CreateClientWithURL(wiki.URL, *wiki.APIURL, *wiki.IndexURL)
 
 		// Try to fetch siteinfo with existing API URL
@@ -56,7 +56,7 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 
 		// If fetch failed with existing API, try re-detecting
 		if err != nil {
-			applogger.Log.Info("[Collector] Existing API failed (%v), re-detecting...", err)
+			applogger.Log.Info("[Collector] Existing API failed, re-detecting", "err", err)
 			client, err = s.mwService.Initialize(ctx, wiki.URL)
 			if err != nil {
 				s.UpdateWikiStatus(ctx, wikiID, models.WikiStatusError, err)
@@ -103,9 +103,9 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 	// Check for duplicate API URL
 	if client.APIURL != nil {
 		if removed, err := s.HandleDuplicateAPIURL(ctx, wiki, *client.APIURL); err != nil {
-			applogger.Log.Info("[Collector] Warning: duplicate check failed: %v", err)
+			applogger.Log.Info("[Collector] Warning: duplicate check failed", "err", err)
 		} else if removed {
-			applogger.Log.Info("[Collector] Wiki %s deleted as duplicate", wikiID)
+			applogger.Log.Info("[Collector] Wiki deleted as duplicate", "wiki_id", wikiID)
 			return NewCollectorError("duplicate_check", ErrWikiDeleted)
 		}
 	}
@@ -138,8 +138,8 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 		return NewCollectorError("create_stats", err)
 	}
 
-	applogger.Log.Info("[Collector] Collection completed for %s: %d pages, %d edits",
-		wikiID, siteinfo.Statistics.Pages, siteinfo.Statistics.Edits)
+	applogger.Log.Info("[Collector] Collection completed",
+		"wiki_id", wikiID, "pages", siteinfo.Statistics.Pages, "edits", siteinfo.Statistics.Edits)
 
 	return nil
 }
@@ -149,7 +149,7 @@ func (s *CollectorService) UpdateWikiStatus(ctx context.Context, wikiID uuid.UUI
 	wikiRepo := repository.NewWikiRepository(s.db)
 	wiki, getErr := wikiRepo.GetByID(ctx, wikiID)
 	if getErr != nil {
-		applogger.Log.Info("[Collector] Failed to get wiki for status update: %v", getErr)
+		applogger.Log.Info("[Collector] Failed to get wiki for status update", "err", getErr)
 		return
 	}
 
@@ -165,7 +165,7 @@ func (s *CollectorService) UpdateWikiStatus(ctx context.Context, wikiID uuid.UUI
 	}
 
 	if updateErr := wikiRepo.Update(ctx, wiki); updateErr != nil {
-		applogger.Log.Info("[Collector] Failed to update wiki status: %v", updateErr)
+		applogger.Log.Info("[Collector] Failed to update wiki status", "err", updateErr)
 	}
 }
 
@@ -190,14 +190,14 @@ func (s *CollectorService) HandleDuplicateAPIURL(ctx context.Context, wiki *mode
 			// Found duplicate - remove the one created later
 			if dup.CreatedAt.Before(wiki.CreatedAt) {
 				// Current wiki is newer, delete it
-				applogger.Log.Info("[Collector] Duplicate API URL found: %s already exists (created %v, current %v)",
-					apiURL, dup.CreatedAt, wiki.CreatedAt)
+				applogger.Log.Info("[Collector] Duplicate API URL found",
+					"api_url", apiURL, "existing_created", dup.CreatedAt, "current_created", wiki.CreatedAt)
 				return true, nil
 			} else {
 				// Duplicate is newer, delete it
-				applogger.Log.Info("[Collector] Removing duplicate wiki %s with API URL %s", dup.ID, apiURL)
+				applogger.Log.Info("[Collector] Removing duplicate wiki", "wiki_id", dup.ID, "api_url", apiURL)
 				if delErr := wikiRepo.Delete(ctx, dup.ID); delErr != nil {
-					applogger.Log.Info("[Collector] Failed to delete duplicate: %v", delErr)
+					applogger.Log.Info("[Collector] Failed to delete duplicate", "err", delErr)
 				}
 			}
 		}
@@ -208,7 +208,7 @@ func (s *CollectorService) HandleDuplicateAPIURL(ctx context.Context, wiki *mode
 
 // CollectBatch collects stats for multiple active wikis
 func (s *CollectorService) CollectBatch(ctx context.Context, limit int, delay time.Duration) ([]*models.WikiStats, error) {
-	applogger.Log.Info("[Collector] Starting batch collection (limit=%d, delay=%v)", limit, delay)
+	applogger.Log.Info("[Collector] Starting batch collection", "limit", limit, "delay", delay)
 
 	wikiRepo := repository.NewWikiRepository(s.db)
 
@@ -220,14 +220,14 @@ func (s *CollectorService) CollectBatch(ctx context.Context, limit int, delay ti
 		return nil, NewCollectorError("list_wikis", err)
 	}
 
-	applogger.Log.Info("[Collector] Found %d active wikis (total: %d)", len(wikis), total)
+	applogger.Log.Info("[Collector] Found active wikis", "count", len(wikis), "total", total)
 
 	var results []*models.WikiStats
 	statsRepo := repository.NewStatsRepository(s.db)
 
 	for i, wiki := range wikis {
 		if err := s.CollectSingleWiki(ctx, wiki.ID); err != nil {
-			applogger.Log.Info("[Collector] Failed to collect %s: %v", wiki.ID, err)
+			applogger.Log.Info("[Collector] Failed to collect wiki", "wiki_id", wiki.ID, "err", err)
 			continue
 		}
 
@@ -243,6 +243,6 @@ func (s *CollectorService) CollectBatch(ctx context.Context, limit int, delay ti
 		}
 	}
 
-	applogger.Log.Info("[Collector] Batch collection completed: %d/%d successful", len(results), len(wikis))
+	applogger.Log.Info("[Collector] Batch collection completed", "successful", len(results), "total", len(wikis))
 	return results, nil
 }

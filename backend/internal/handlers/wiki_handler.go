@@ -271,7 +271,7 @@ func (h *WikiHandler) TriggerCheck(c echo.Context) error {
 		collector := services.NewCollectorService(h.db, mwService, h.config)
 
 		if err := collector.CollectSingleWiki(bgCtx, id); err != nil {
-			applogger.Log.Info("[Handler] Collection failed for %s: %v", id, err)
+			applogger.Log.Info("[Handler] Collection failed for wiki", "wiki_id", id, "err", err)
 		}
 	}()
 
@@ -416,7 +416,7 @@ func (h *WikiHandler) CheckArchive(c echo.Context) error {
 
 		found, imported, updated, err := archiveService.CollectArchives(bgCtx, h.db, id, apiURL, indexURL)
 		if err != nil {
-			applogger.Log.Info("[Handler] Archive check failed for %s: %v", id, err)
+			applogger.Log.Info("[Handler] Archive check failed for wiki", "wiki_id", id, "err", err)
 			// Update wiki with archive error
 			archiveService.UpdateWikiArchiveError(bgCtx, h.db, id, err)
 		} else {

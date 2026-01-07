@@ -55,7 +55,7 @@ func (s *ArchiveScheduler) Start(ctx context.Context) {
 
 	s.ticker = time.NewTicker(interval)
 
-	applogger.Log.Info("[ArchiveScheduler] Started with interval: %v", interval)
+	applogger.Log.Info("[ArchiveScheduler] Started with interval", "interval", interval)
 
 	// Run initial archive check
 	s.wg.Add(1)
@@ -107,12 +107,12 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 		OrderBy: "archive_last_check_at ASC NULLS FIRST",
 	})
 	if err != nil {
-		applogger.Log.Info("[ArchiveScheduler] Failed to get wikis: %v", err)
+		applogger.Log.Info("[ArchiveScheduler] Failed to get wikis", "error", err)
 		return
 	}
 
 	totalWikis := len(wikis)
-	applogger.Log.Info("[ArchiveScheduler] Found %d wikis to check archives", totalWikis)
+	applogger.Log.Info("[ArchiveScheduler] Found wikis to check archives", "total", totalWikis)
 
 	if totalWikis == 0 {
 		return
@@ -134,7 +134,7 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 
 		// Skip wikis without API URL
 		if wiki.APIURL == nil {
-			applogger.Log.Info("[ArchiveScheduler] Skipping wiki %s: no API URL", wiki.URL)
+			applogger.Log.Info("[ArchiveScheduler] Skipping wiki: no API URL", "url", wiki.URL)
 			skippedCount++
 			continue
 		}
@@ -150,18 +150,18 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 
 		found, imported, updated, err := s.archiveService.CollectArchives(ctx, s.db, wiki.ID, apiURL, indexURL)
 		if err != nil {
-			applogger.Log.Info("[ArchiveScheduler] Failed to check wiki %s: %v", wiki.ID, err)
+			applogger.Log.Info("[ArchiveScheduler] Failed to check wiki", "wiki_id", wiki.ID, "error", err)
 			s.archiveService.UpdateWikiArchiveError(ctx, s.db, wiki.ID, err)
 			errorCount++
 		} else {
-			applogger.Log.Info("[ArchiveScheduler] Archive check completed: found=%d, imported=%d, updated=%d", found, imported, updated)
+			applogger.Log.Info("[ArchiveScheduler] Archive check completed", "found", found, "imported", imported, "updated", updated)
 			successCount++
 		}
 
 		// Rate limiting delay
 		if i < totalWikis-1 && s.config.ArchiveCheckDelay > 0 {
 			delay := time.Duration(s.config.ArchiveCheckDelay * float64(time.Second))
-			applogger.Log.Info("[ArchiveScheduler] Waiting %v before next wiki...", delay)
+			applogger.Log.Info("[ArchiveScheduler] Waiting before next wiki", "delay", delay)
 			select {
 			case <-time.After(delay):
 			case <-s.stopCh:
@@ -172,8 +172,8 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 	}
 
 	elapsed := time.Since(startTime)
-	applogger.Log.Info("[ArchiveScheduler] Archive check cycle completed: %d success, %d errors, %d skipped, duration: %v",
-		successCount, errorCount, skippedCount, elapsed.Round(time.Second))
+	applogger.Log.Info("[ArchiveScheduler] Archive check cycle completed",
+		"success", successCount, "errors", errorCount, "skipped", skippedCount, "duration", elapsed.Round(time.Second))
 }
 
 // periodicRun runs archive checks continuously with backoff based on archive_last_check_at
@@ -198,7 +198,7 @@ func (s *ArchiveScheduler) periodicRun(ctx context.Context) {
 				OrderBy:  "archive_last_check_at ASC NULLS FIRST",
 			})
 			if err != nil {
-				applogger.Log.Info("[ArchiveScheduler] Failed to check wikis: %v", err)
+				applogger.Log.Info("[ArchiveScheduler] Failed to check wikis", "error", err)
 				time.Sleep(10 * time.Second)
 				continue
 			}

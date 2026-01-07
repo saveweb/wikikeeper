@@ -52,7 +52,7 @@ func (h *AdminHandler) DeleteWiki(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"detail": err.Error()})
 	}
 
-	applogger.Log.Info("[Admin] Wiki %s deleted", id)
+	applogger.Log.Info("[Admin] Wiki deleted", "id", id)
 
 	return c.JSON(http.StatusOK, map[string]string{
 		"detail":  "Wiki deleted",
@@ -73,11 +73,11 @@ func (h *AdminHandler) CollectAll(c echo.Context) error {
 			PageSize: 10000, // Get all
 		})
 		if err != nil {
-			applogger.Log.Info("[Admin] Failed to get wikis for collection: %v", err)
+			applogger.Log.Info("[Admin] Failed to get wikis for collection", "err", err)
 			return
 		}
 
-		applogger.Log.Info("[Admin] Starting collection for %d wikis (total: %d)", len(wikis), total)
+		applogger.Log.Info("[Admin] Starting collection for wikis", "count", len(wikis), "total", total)
 
 		mwService := services.NewMediaWikiService(
 			time.Duration(h.config.HTTPTimeout)*time.Second,
@@ -93,10 +93,10 @@ func (h *AdminHandler) CollectAll(c echo.Context) error {
 				continue
 			}
 
-			applogger.Log.Info("[Admin] Collecting wiki %d/%d: %s", i+1, len(wikis), wiki.URL)
+			applogger.Log.Info("[Admin] Collecting wiki", "index", i+1, "total", len(wikis), "url", wiki.URL)
 
 			if err := collector.CollectSingleWiki(ctx, wiki.ID); err != nil {
-				applogger.Log.Info("[Admin] Failed to collect %s: %v", wiki.ID, err)
+				applogger.Log.Info("[Admin] Failed to collect wiki", "wiki_id", wiki.ID, "err", err)
 				errorCount++
 			} else {
 				successCount++
@@ -108,7 +108,7 @@ func (h *AdminHandler) CollectAll(c echo.Context) error {
 			}
 		}
 
-		applogger.Log.Info("[Admin] Collection completed: %d success, %d errors", successCount, errorCount)
+		applogger.Log.Info("[Admin] Collection completed", "success", successCount, "errors", errorCount)
 	}()
 
 	return c.JSON(http.StatusAccepted, map[string]string{
@@ -129,11 +129,11 @@ func (h *AdminHandler) CheckAllArchives(c echo.Context) error {
 			PageSize: 10000, // Get all
 		})
 		if err != nil {
-			applogger.Log.Info("[Admin] Failed to get wikis for archive check: %v", err)
+			applogger.Log.Info("[Admin] Failed to get wikis for archive check", "err", err)
 			return
 		}
 
-		applogger.Log.Info("[Admin] Starting archive check for %d wikis (total: %d)", len(wikis), total)
+		applogger.Log.Info("[Admin] Starting archive check for wikis", "count", len(wikis), "total", total)
 
 		archiveService := services.NewArchiveService(
 			time.Duration(h.config.HTTPTimeout)*time.Second,
@@ -146,11 +146,11 @@ func (h *AdminHandler) CheckAllArchives(c echo.Context) error {
 		skippedCount := 0
 
 		for i, wiki := range wikis {
-			applogger.Log.Info("[Admin] Checking wiki %d/%d: %s", i+1, len(wikis), wiki.URL)
+			applogger.Log.Info("[Admin] Checking wiki", "index", i+1, "total", len(wikis), "url", wiki.URL)
 
 			// Skip wikis without API URL
 			if wiki.APIURL == nil {
-				applogger.Log.Info("[Admin] Skipping wiki %s: no API URL", wiki.URL)
+				applogger.Log.Info("[Admin] Skipping wiki: no API URL", "url", wiki.URL)
 				skippedCount++
 				continue
 			}
@@ -163,24 +163,23 @@ func (h *AdminHandler) CheckAllArchives(c echo.Context) error {
 
 			found, imported, updated, err := archiveService.CollectArchives(ctx, h.db, wiki.ID, apiURL, indexURL)
 			if err != nil {
-				applogger.Log.Info("[Admin] Failed to check wiki %s: %v", wiki.ID, err)
+				applogger.Log.Info("[Admin] Failed to check wiki", "wiki_id", wiki.ID, "err", err)
 				archiveService.UpdateWikiArchiveError(ctx, h.db, wiki.ID, err)
 				errorCount++
 			} else {
-				applogger.Log.Info("[Admin] Archive check completed: found=%d, imported=%d, updated=%d", found, imported, updated)
+				applogger.Log.Info("[Admin] Archive check completed", "found", found, "imported", imported, "updated", updated)
 				successCount++
 			}
 
 			// Rate limiting delay
 			if i < len(wikis)-1 && h.config.ArchiveCheckDelay > 0 {
 				delay := time.Duration(h.config.ArchiveCheckDelay * float64(time.Second))
-				applogger.Log.Info("[Admin] Waiting %v before next wiki...", delay)
+				applogger.Log.Info("[Admin] Waiting before next wiki", "delay", delay)
 				time.Sleep(delay)
 			}
 		}
 
-		applogger.Log.Info("[Admin] Archive check completed: %d success, %d errors, %d skipped",
-			successCount, errorCount, skippedCount)
+		applogger.Log.Info("[Admin] Archive check completed", "success", successCount, "errors", errorCount, "skipped", skippedCount)
 	}()
 
 	return c.JSON(http.StatusAccepted, map[string]string{
