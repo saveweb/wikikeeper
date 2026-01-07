@@ -18,6 +18,7 @@ DROP TABLE IF EXISTS wiki_stats;
 
 DROP INDEX IF EXISTS idx_wikis_sitename;
 DROP INDEX IF EXISTS idx_wikis_last_check_at;
+DROP INDEX IF EXISTS idx_wikis_archive_last_check_at;
 DROP INDEX IF EXISTS idx_wikis_updated_at;
 DROP INDEX IF EXISTS idx_wikis_created_at;
 DROP INDEX IF EXISTS idx_wikis_api_url;

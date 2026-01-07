@@ -23,6 +23,11 @@ CREATE TABLE IF NOT EXISTS wikis (
     last_error TEXT,
     last_error_at TIMESTAMP,
 
+    -- Archive check status
+    archive_last_check_at TIMESTAMP,
+    archive_last_error TEXT,
+    archive_last_error_at TIMESTAMP,
+
     -- Timestamps
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -41,6 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_wikis_created_at ON wikis(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_wikis_updated_at ON wikis(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_wikis_last_check_at ON wikis(last_check_at);
 CREATE INDEX IF NOT EXISTS idx_wikis_sitename ON wikis(sitename);
+CREATE INDEX IF NOT EXISTS idx_wikis_archive_last_check_at ON wikis(archive_last_check_at);
 
 -- Create trigger function to update updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
