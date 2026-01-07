@@ -30,12 +30,3 @@ func NormalizeURL(rawURL string) string {
 
 	return rawURL
 }
-
-// isValidURL checks if a URL string is valid
-func isValidURL(rawURL string) bool {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return false
-	}
-	return u.Scheme != "" && u.Host != ""
-}
