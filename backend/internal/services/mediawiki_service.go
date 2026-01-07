@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,7 +16,7 @@ import (
 
 // MediaWikiService handles MediaWiki API interactions
 type MediaWikiService struct {
-	timeout  time.Duration
+	timeout   time.Duration
 	userAgent string
 }
 
@@ -32,30 +33,30 @@ func NewMediaWikiService(timeout time.Duration, userAgent string) *MediaWikiServ
 
 // MediaWikiClient represents a detected MediaWiki installation
 type MediaWikiClient struct {
-	URL            string  // Original URL
-	APIURL         *string // Detected API URL
-	IndexURL       *string // Detected index URL
-	WasRedirected  bool    // Whether URL was permanently redirected
+	URL           string  // Original URL
+	APIURL        *string // Detected API URL
+	IndexURL      *string // Detected index URL
+	WasRedirected bool    // Whether URL was permanently redirected
 }
 
 // SiteInfo contains site information and statistics
 type SiteInfo struct {
 	General      SiteInfoGeneral
 	Statistics   SiteInfoStatistics
-	ResponseTime int   // Response time in milliseconds
-	HTTPStatus   int   // HTTP status code
+	ResponseTime int // Response time in milliseconds
+	HTTPStatus   int // HTTP status code
 }
 
 // SiteInfoGeneral contains general site information from siteinfo
 type SiteInfoGeneral struct {
-	Sitename      string  `json:"sitename"`
-	Lang          string  `json:"lang"`
-	DBType        string  `json:"dbtype"`
-	DBVersion     string  `json:"dbversion"`
-	Generator     string  `json:"generator"`
-	BaseURL       string  `json:"baseurl"`
-	MainPage      string  `json:"mainpage"`
-	MaxPageID     *int    `json:"maxpageid,omitempty"`
+	Sitename  string `json:"sitename"`
+	Lang      string `json:"lang"`
+	DBType    string `json:"dbtype"`
+	DBVersion string `json:"dbversion"`
+	Generator string `json:"generator"`
+	BaseURL   string `json:"baseurl"`
+	MainPage  string `json:"mainpage"`
+	MaxPageID *int   `json:"maxpageid,omitempty"`
 }
 
 // SiteInfoStatistics contains wiki statistics from siteinfo
@@ -73,18 +74,18 @@ type SiteInfoStatistics struct {
 // API response structures
 type mediawikiResponse struct {
 	Query struct {
-		General     map[string]interface{} `json:"general"`
-		Statistics  map[string]interface{} `json:"statistics"`
+		General    map[string]interface{} `json:"general"`
+		Statistics map[string]interface{} `json:"statistics"`
 	} `json:"query"`
 	Error *struct {
-		Code    string `json:"code"`
-		Info    string `json:"info"`
+		Code string `json:"code"`
+		Info string `json:"info"`
 	} `json:"error"`
 }
 
 // Initialize detects and validates the MediaWiki API for a given URL
 func (s *MediaWikiService) Initialize(ctx context.Context, wikiURL string) (*MediaWikiClient, error) {
-	applogger.Log.Info("[MediaWiki] Initializing: %s", wikiURL)
+	applogger.Log.Info("[MediaWiki] Initializing", "wiki_url", wikiURL)
 
 	// Try to detect if the base URL needs scheme upgrade (http -> https)
 	normalizedURL, wasRedirected := s.detectSchemeUpgrade(ctx, wikiURL)
@@ -108,7 +109,7 @@ func (s *MediaWikiService) Initialize(ctx context.Context, wikiURL string) (*Med
 
 // CreateClientWithURL creates a MediaWikiClient with pre-known API and Index URLs
 func (s *MediaWikiService) CreateClientWithURL(wikiURL, apiURL, indexURL string) *MediaWikiClient {
-	applogger.Log.Info("[MediaWiki] Creating client with known API: %s", apiURL)
+	applogger.Log.Info("[MediaWiki] Creating client with known API", "api_url", apiURL)
 
 	return &MediaWikiClient{
 		URL:           wikiURL,
@@ -166,8 +167,7 @@ func (s *MediaWikiService) FetchSiteinfo(ctx context.Context, client *MediaWikiC
 		HTTPStatus:   resp.StatusCode,
 	}
 
-	applogger.Log.Info("[MediaWiki] Fetched siteinfo: %s (pages=%d, edits=%d, %dms)",
-		general.Sitename, stats.Pages, stats.Edits, siteinfo.ResponseTime)
+	applogger.Log.Info("[MediaWiki] Fetched siteinfo", "sitename", general.Sitename, "pages", stats.Pages, "edits", stats.Edits, "response_time_ms", siteinfo.ResponseTime)
 
 	return siteinfo, nil
 }
@@ -213,7 +213,7 @@ func (s *MediaWikiService) detectAPIURL(ctx context.Context, baseURL string) (ap
 					if json.Unmarshal(body, &result) == nil {
 						if _, ok := result["query"]; ok {
 							// Redirected URL works! Use it
-							applogger.Log.Info("[MediaWiki] Using redirected API: %s", redirectedAPI)
+							applogger.Log.Info("[MediaWiki] Using redirected API", "api_url", redirectedAPI)
 							apiURL = redirectedAPI
 
 							// Also upgrade index URL to match the redirect target
@@ -234,10 +234,10 @@ func (s *MediaWikiService) detectAPIURL(ctx context.Context, baseURL string) (ap
 				}
 
 				// Redirected URL doesn't work as MediaWiki API, fall through to test original
-				applogger.Log.Info("[MediaWiki] Redirected URL doesn't work, trying original: %s", candidate.apiURL)
+				applogger.Log.Info("[MediaWiki] Redirected URL doesn't work, trying original", "api_url", candidate.apiURL)
 			} else {
 				// Path changed - skip this candidate entirely
-				applogger.Log.Info("[MediaWiki] Skipping candidate due to path redirect: %s -> %s", candidate.apiURL, redirectedAPI)
+				applogger.Log.Info("[MediaWiki] Skipping candidate due to path redirect", "api_url", candidate.apiURL, "redirected_api", redirectedAPI)
 				continue
 			}
 		}
@@ -287,7 +287,7 @@ func (s *MediaWikiService) detectAPIURL(ctx context.Context, baseURL string) (ap
 	}
 	errMsg += ")"
 
-	return "", "", NewMediaWikiError("detect_api", baseURL, fmt.Errorf(errMsg))
+	return "", "", NewMediaWikiError("detect_api", baseURL, errors.New(errMsg))
 }
 
 // checkRedirect checks for permanent redirect (301/308)
