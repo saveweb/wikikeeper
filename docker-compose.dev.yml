@@ -1,0 +1,106 @@
+# Development environment - starts all local development services
+# Usage: docker compose -f docker-compose.dev.yml up -d
+
+services:
+  # PostgreSQL Database for development
+  postgres:
+    image: postgres:16-alpine
+    container_name: wikikeeper-postgres-dev
+    environment:
+      POSTGRES_DB: wikikeeper
+      POSTGRES_USER: wikikeeper
+      POSTGRES_PASSWORD: wikikeeper123
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./docker/postgres.conf:/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wikikeeper"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - wikikeeper-dev
+
+  # Backend API (Go) - runs locally mounted code with hot reload
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: wikikeeper-backend-dev
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: wikikeeper
+      DB_PASSWORD: wikikeeper123
+      DB_NAME: wikikeeper
+      PORT: 8000
+      HOST: 0.0.0.0
+      DEBUG: "true"
+      LOG_LEVEL: DEBUG
+      HTTP_TIMEOUT: 30.0
+      HTTP_USER_AGENT: "WikiKeeper-Dev/0.2.0"
+      COLLECT_DELAY: 1.5
+      COLLECT_BATCH_SIZE: 50
+      ARCHIVE_CHECK_DELAY: 0.5
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - backend_deps:/go/pkg/mod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - wikikeeper-dev
+    stdin_open: true
+    tty: true
+
+  # Frontend (SvelteKit/Vite) - runs locally mounted code with hot reload
+  frontend:
+    image: node:20-alpine
+    container_name: wikikeeper-frontend-dev
+    working_dir: /app
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend_deps:/app/node_modules
+    command: sh -c "npm install && npm run dev -- --host"
+    networks:
+      - wikikeeper-dev
+    stdin_open: true
+    tty: true
+
+  # Optional: Adminer for database management
+  adminer:
+    image: adminer:latest
+    container_name: wikikeeper-adminer-dev
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: nette
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - wikikeeper-dev
+    profiles:
+      - tools
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  backend_deps:
+    driver: local
+  frontend_deps:
+    driver: local
+
+networks:
+  wikikeeper-dev:
+    driver: bridge

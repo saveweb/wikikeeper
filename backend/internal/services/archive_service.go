@@ -19,6 +19,8 @@ import (
 	"wikikeeper-backend/internal/repository"
 )
 
+var archiveLog = applogger.With("component", "archive")
+
 // ArchiveService checks Archive.org for wiki backups
 type ArchiveService struct {
 	timeout    time.Duration
@@ -84,7 +86,7 @@ type archiveMetadata struct {
 
 // CheckArchive searches Archive.org for wiki backups
 func (s *ArchiveService) CheckArchive(ctx context.Context, apiURL, indexURL string) ([]*ArchiveInfo, error) {
-	applogger.Log.Info("[Archive] Checking Archive.org for", "api_url", apiURL)
+	archiveLog.Info("Checking Archive.org for", "api_url", apiURL)
 
 	if apiURL == "" {
 		return nil, fmt.Errorf("API URL is required")
@@ -107,7 +109,7 @@ func (s *ArchiveService) CheckArchive(ctx context.Context, apiURL, indexURL stri
 		apiURLHTTP, apiURLHTTPS, indexURLHTTP, indexURLHTTPS)
 	searchURL := s.buildSearchURL(query)
 
-	applogger.Log.Info("[Archive] Search URL", "url", searchURL, "query", query)
+	archiveLog.Info("Search URL", "url", searchURL, "query", query)
 
 	// Make search request
 	results, err := s.searchArchive(ctx, searchURL)
@@ -115,7 +117,7 @@ func (s *ArchiveService) CheckArchive(ctx context.Context, apiURL, indexURL stri
 		return nil, fmt.Errorf("archive search failed: %w", err)
 	}
 
-	applogger.Log.Info("[Archive] Found results for the apiURL", "count", len(results), "api_url", apiURL)
+	archiveLog.Info("Found results for the apiURL", "count", len(results), "api_url", apiURL)
 
 	var archives []*ArchiveInfo
 
@@ -123,7 +125,7 @@ func (s *ArchiveService) CheckArchive(ctx context.Context, apiURL, indexURL stri
 	for _, result := range results {
 		info, err := s.parseArchiveItem(ctx, result)
 		if err != nil {
-			applogger.Log.Info("[Archive] Failed to parse item", "identifier", result.Identifier, "err", err)
+			archiveLog.Info("Failed to parse item", "identifier", result.Identifier, "err", err)
 			continue
 		}
 
@@ -174,7 +176,7 @@ func (s *ArchiveService) CollectArchives(ctx context.Context, db *gorm.DB, wikiI
 
 		// Use Upsert to handle both new and existing archives
 		if err := archiveRepo.UpsertByWikiAndIAIdentifier(ctx, wikiArchive); err != nil {
-			applogger.Log.Info("[Archive] Failed to upsert archive", "identifier", archiveInfo.IAIdentifier, "err", err)
+			archiveLog.Info("Failed to upsert archive", "identifier", archiveInfo.IAIdentifier, "err", err)
 			continue
 		}
 
@@ -182,17 +184,17 @@ func (s *ArchiveService) CollectArchives(ctx context.Context, db *gorm.DB, wikiI
 		exists, _ := archiveRepo.ExistsByWikiAndIAIdentifier(ctx, wikiID, archiveInfo.IAIdentifier)
 		if exists {
 			updated++
-			applogger.Log.Info("[Archive] Updated archive", "identifier", archiveInfo.IAIdentifier)
+			archiveLog.Info("Updated archive", "identifier", archiveInfo.IAIdentifier)
 		} else {
 			imported++
-			applogger.Log.Info("[Archive] Imported archive", "identifier", archiveInfo.IAIdentifier)
+			archiveLog.Info("Imported archive", "identifier", archiveInfo.IAIdentifier)
 		}
 	}
 
 	// Update wiki has_archive status
 	s.updateWikiArchiveStatus(ctx, db, wikiID, true)
 
-	applogger.Log.Info("[Archive] Archive collection completed", "found", found, "imported", imported, "updated", updated)
+	archiveLog.Info("Archive collection completed", "found", found, "imported", imported, "updated", updated)
 	return found, imported, updated, nil
 }
 
@@ -201,7 +203,7 @@ func (s *ArchiveService) updateWikiArchiveStatus(ctx context.Context, db *gorm.D
 	wikiRepo := repository.NewWikiRepository(db)
 	wiki, err := wikiRepo.GetByID(ctx, wikiID)
 	if err != nil {
-		applogger.Log.Info("[Archive] Failed to get wiki for status update", "err", err)
+		archiveLog.Info("Failed to get wiki for status update", "err", err)
 		return
 	}
 
@@ -213,7 +215,7 @@ func (s *ArchiveService) updateWikiArchiveStatus(ctx context.Context, db *gorm.D
 	wiki.ArchiveLastErrorAt = nil
 
 	if err := wikiRepo.Update(ctx, wiki); err != nil {
-		applogger.Log.Info("[Archive] Failed to update wiki has_archive status", "err", err)
+		archiveLog.Info("Failed to update wiki has_archive status", "err", err)
 	}
 }
 
@@ -222,7 +224,7 @@ func (s *ArchiveService) UpdateWikiArchiveError(ctx context.Context, db *gorm.DB
 	wikiRepo := repository.NewWikiRepository(db)
 	wiki, getErr := wikiRepo.GetByID(ctx, wikiID)
 	if getErr != nil {
-		applogger.Log.Info("[Archive] Failed to get wiki for error update", "err", getErr)
+		archiveLog.Info("Failed to get wiki for error update", "err", getErr)
 		return
 	}
 
@@ -233,7 +235,7 @@ func (s *ArchiveService) UpdateWikiArchiveError(ctx context.Context, db *gorm.DB
 	wiki.ArchiveLastCheckAt = &now
 
 	if updateErr := wikiRepo.Update(ctx, wiki); updateErr != nil {
-		applogger.Log.Info("[Archive] Failed to update wiki archive error", "err", updateErr)
+		archiveLog.Info("Failed to update wiki archive error", "err", updateErr)
 	}
 }
 
@@ -261,7 +263,7 @@ func (s *ArchiveService) searchArchive(ctx context.Context, searchURL string) ([
 		}
 	}
 
-	applogger.Log.Info("[Archive] Extracted query", "query", query)
+	archiveLog.Info("Extracted query", "query", query)
 
 	for {
 		// Build URL with query parameters for POST request
@@ -315,7 +317,7 @@ func (s *ArchiveService) searchArchive(ctx context.Context, searchURL string) ([
 
 		// Check if we've reached the max results limit
 		if len(allDocs) >= maxResults {
-			applogger.Log.Info("[Archive] Reached max results limit", "max", maxResults)
+			archiveLog.Info("Reached max results limit", "max", maxResults)
 			break
 		}
 
@@ -326,10 +328,10 @@ func (s *ArchiveService) searchArchive(ctx context.Context, searchURL string) ([
 			break
 		}
 
-		applogger.Log.Info("[Archive] Fetched batch", "items", len(result.Items), "has_cursor", true)
+		archiveLog.Info("Fetched batch", "items", len(result.Items), "has_cursor", true)
 	}
 
-	applogger.Log.Info("[Archive] Search result", "total_found", len(allDocs))
+	archiveLog.Info("Search result", "total_found", len(allDocs))
 	return allDocs, nil
 }
 
@@ -366,7 +368,7 @@ func (s *ArchiveService) parseArchiveItem(ctx context.Context, result archiveSea
 	// Fetch full metadata
 	metadata, err := s.fetchMetadata(ctx, result.Identifier)
 	if err != nil {
-		applogger.Log.Info("[Archive] Failed to fetch metadata", "identifier", result.Identifier, "err", err)
+		archiveLog.Info("Failed to fetch metadata", "identifier", result.Identifier, "err", err)
 		// Return basic info even if metadata fetch fails
 		return info, nil
 	}
@@ -439,7 +441,7 @@ func (s *ArchiveService) parseArchiveItem(ctx context.Context, result archiveSea
 	// Check file contents
 	s.checkFileContents(info, metadata.Files)
 
-	applogger.Log.Info("[Archive] Loaded", "identifier", result.Identifier,
+	archiveLog.Info("Loaded", "identifier", result.Identifier,
 		"xml_current", info.HasXMLCurrent, "xml_history", info.HasXMLHistory)
 
 	return info, nil

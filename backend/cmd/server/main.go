@@ -53,12 +53,12 @@ func main() {
 		cfg.ArchiveCheckDelay,
 	)
 
-	// Start collection scheduler
-	scheduler := services.NewCollectionScheduler(db, mwService, archiveService, cfg)
+	// Start siteinfo scheduler
+	siteinfoScheduler := services.NewSiteInfoScheduler(db, mwService, archiveService, cfg)
 	ctx := context.Background()
-	scheduler.Start(ctx)
-	applogger.Log.Info("collection scheduler started")
-	defer scheduler.Stop()
+	siteinfoScheduler.Start(ctx)
+	applogger.Log.Info("siteinfo scheduler started")
+	defer siteinfoScheduler.Stop()
 
 	// Start archive check scheduler
 	archiveScheduler := services.NewArchiveScheduler(db, archiveService, cfg)

@@ -50,3 +50,8 @@ func Init(level string) {
 	// Set default logger
 	slog.SetDefault(Log)
 }
+
+// With returns a new logger with default attributes
+func With(attrs ...any) *slog.Logger {
+	return Log.With(attrs...)
+}

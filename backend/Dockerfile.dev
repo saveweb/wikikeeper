@@ -1,0 +1,25 @@
+# Development Dockerfile for WikiKeeper Backend
+# This is meant for local development with hot reload
+
+FROM golang:1.25-alpine
+
+# Install air for hot reload and other development tools
+RUN apk add --no-cache git make
+
+# Install air
+RUN go install github.com/air-verse/air@latest
+
+WORKDIR /app
+
+# Copy go mod files first (for better caching)
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Expose port
+EXPOSE 8000
+
+# Run with hot reload using air
+CMD ["air", "-c", ".air.toml"]

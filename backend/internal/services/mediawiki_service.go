@@ -14,6 +14,8 @@ import (
 	applogger "wikikeeper-backend/internal/logger"
 )
 
+var mediaWikiLog = applogger.With("component", "mediawiki")
+
 // MediaWikiService handles MediaWiki API interactions
 type MediaWikiService struct {
 	timeout   time.Duration
@@ -85,7 +87,7 @@ type mediawikiResponse struct {
 
 // Initialize detects and validates the MediaWiki API for a given URL
 func (s *MediaWikiService) Initialize(ctx context.Context, wikiURL string) (*MediaWikiClient, error) {
-	applogger.Log.Info("[MediaWiki] Initializing", "wiki_url", wikiURL)
+	mediaWikiLog.Info("Initializing", "wiki_url", wikiURL)
 
 	// Try to detect if the base URL needs scheme upgrade (http -> https)
 	normalizedURL, wasRedirected := s.detectSchemeUpgrade(ctx, wikiURL)
@@ -103,13 +105,13 @@ func (s *MediaWikiService) Initialize(ctx context.Context, wikiURL string) (*Med
 		WasRedirected: wasRedirected,
 	}
 
-	applogger.Log.Info("[MediaWiki] API found: %s (redirected: %v)", apiURL, wasRedirected)
+	mediaWikiLog.Info("API found", "api_url", apiURL, "redirected", wasRedirected)
 	return client, nil
 }
 
 // CreateClientWithURL creates a MediaWikiClient with pre-known API and Index URLs
 func (s *MediaWikiService) CreateClientWithURL(wikiURL, apiURL, indexURL string) *MediaWikiClient {
-	applogger.Log.Info("[MediaWiki] Creating client with known API", "api_url", apiURL)
+	mediaWikiLog.Info("Creating client with known API", "api_url", apiURL)
 
 	return &MediaWikiClient{
 		URL:           wikiURL,
@@ -167,7 +169,7 @@ func (s *MediaWikiService) FetchSiteinfo(ctx context.Context, client *MediaWikiC
 		HTTPStatus:   resp.StatusCode,
 	}
 
-	applogger.Log.Info("[MediaWiki] Fetched siteinfo", "sitename", general.Sitename, "pages", stats.Pages, "edits", stats.Edits, "response_time_ms", siteinfo.ResponseTime)
+	mediaWikiLog.Info("Fetched siteinfo", "sitename", general.Sitename, "pages", stats.Pages, "edits", stats.Edits, "response_time_ms", siteinfo.ResponseTime)
 
 	return siteinfo, nil
 }
@@ -199,7 +201,7 @@ func (s *MediaWikiService) detectAPIURL(ctx context.Context, baseURL string) (ap
 		if checkErr == nil && hasRedirect {
 			// Check if this is a scheme/host-only redirect (path unchanged)
 			if isSchemeOrHostRedirect(candidate.apiURL, redirectedAPI) {
-				applogger.Log.Info("[MediaWiki] Testing redirect for API: %s -> %s", candidate.apiURL, redirectedAPI)
+				mediaWikiLog.Info("Testing redirect for API", "api_url", candidate.apiURL, "redirected_api", redirectedAPI)
 
 				// Test if the redirected URL actually works as a MediaWiki API
 				testURL := redirectedAPI + "?action=query&meta=siteinfo&format=json"
@@ -213,7 +215,7 @@ func (s *MediaWikiService) detectAPIURL(ctx context.Context, baseURL string) (ap
 					if json.Unmarshal(body, &result) == nil {
 						if _, ok := result["query"]; ok {
 							// Redirected URL works! Use it
-							applogger.Log.Info("[MediaWiki] Using redirected API", "api_url", redirectedAPI)
+							mediaWikiLog.Info("Using redirected API", "api_url", redirectedAPI)
 							apiURL = redirectedAPI
 
 							// Also upgrade index URL to match the redirect target
@@ -234,10 +236,10 @@ func (s *MediaWikiService) detectAPIURL(ctx context.Context, baseURL string) (ap
 				}
 
 				// Redirected URL doesn't work as MediaWiki API, fall through to test original
-				applogger.Log.Info("[MediaWiki] Redirected URL doesn't work, trying original", "api_url", candidate.apiURL)
+				mediaWikiLog.Info("Redirected URL doesn't work, trying original", "api_url", candidate.apiURL)
 			} else {
 				// Path changed - skip this candidate entirely
-				applogger.Log.Info("[MediaWiki] Skipping candidate due to path redirect", "api_url", candidate.apiURL, "redirected_api", redirectedAPI)
+				mediaWikiLog.Info("Skipping candidate due to path redirect", "api_url", candidate.apiURL, "redirected_api", redirectedAPI)
 				continue
 			}
 		}
@@ -317,7 +319,7 @@ func (s *MediaWikiService) checkRedirect(ctx context.Context, url string) (strin
 	if resp.StatusCode == 301 || resp.StatusCode == 308 {
 		location := resp.Header.Get("Location")
 		if location != "" {
-			applogger.Log.Info("[MediaWiki] Permanent redirect: %s -> %s", url, location)
+			mediaWikiLog.Info("Permanent redirect", "url", url, "location", location)
 			return location, true, nil
 		}
 	}
@@ -356,7 +358,7 @@ func (s *MediaWikiService) detectSchemeUpgrade(ctx context.Context, url string) 
 
 	// If HTTPS responds successfully (even with redirect), upgrade
 	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
-		applogger.Log.Info("[MediaWiki] Scheme upgrade: %s -> %s", url, httpsURL)
+		mediaWikiLog.Info("Scheme upgrade", "url", url, "https_url", httpsURL)
 		return httpsURL, true
 	}
 

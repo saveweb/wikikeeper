@@ -26,10 +26,11 @@ type CallbackRequest struct {
 }
 
 // Callback handles GET /api/auth/callback
-// This endpoint is used for cross-domain cookie setting
+// This endpoint is used for cross-domain cookie setting/clearing
 // Flow:
 // 1. Frontend redirects to API domain: https://api.example.com/api/auth/callback?token=xxx&redirect_to=xxx
-// 2. API validates token and sets cookie (same domain)
+// 2a. If token is provided and valid: API sets cookie (same domain)
+// 2b. If token is empty: API clears cookie
 // 3. API redirects back to frontend
 func (h *AuthHandler) Callback(c echo.Context) error {
 	var req CallbackRequest
@@ -37,32 +38,33 @@ func (h *AuthHandler) Callback(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid request parameters")
 	}
 
-	// Validate token
+	// Validate token (if provided)
 	if h.config.AdminToken == "" {
 		return c.String(http.StatusInternalServerError, "Admin authentication is not configured")
 	}
 
-	if req.Token == "" {
-		return c.String(http.StatusBadRequest, "Token is required")
-	}
+	var cookie *http.Cookie
 
-	if req.Token != h.config.AdminToken {
-		return c.String(http.StatusUnauthorized, "Invalid token")
-	}
+	if req.Token != "" {
+		// Validate and set cookie
+		if req.Token != h.config.AdminToken {
+			return c.String(http.StatusUnauthorized, "Invalid token")
+		}
 
-	// Set cookie on API domain
-	cookie := &http.Cookie{
+	}
+	cookie = &http.Cookie{
 		Name:     "admintoken",
 		Value:    req.Token,
 		Path:     "/",
 		MaxAge:   int(30 * 24 * time.Hour / time.Second), // 30 days
 		HttpOnly: true,
-		Secure:   c.Request().TLS != nil || c.Request().Header.Get("X-Forwarded-Proto") == "https", // Secure only if using HTTPS
-		SameSite: http.SameSiteNoneMode,                                                            // None for cross-origin
+		Secure:   c.Request().TLS != nil || c.Request().Header.Get("X-Forwarded-Proto") == "https",
+		SameSite: http.SameSiteNoneMode,
 	}
 	c.SetCookie(cookie)
 
-	return c.HTML(http.StatusOK, `<html><head><meta http-equiv="refresh" content="2;url=`+req.RedirectTo+`"></head><body></body></html>`)
+	// Redirect back to frontend
+	return c.HTML(http.StatusOK, `<html><head><meta http-equiv="refresh" content="0;url=`+req.RedirectTo+`"></head><body></body></html>`)
 }
 
 // Check handles GET /api/auth/check
