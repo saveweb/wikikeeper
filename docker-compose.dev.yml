@@ -42,7 +42,6 @@ services:
       LOG_LEVEL: DEBUG
       HTTP_TIMEOUT: 30.0
       HTTP_USER_AGENT: "WikiKeeper-Dev/0.2.0"
-      COLLECT_DELAY: 1.5
       COLLECT_BATCH_SIZE: 50
       ARCHIVE_CHECK_DELAY: 0.5
       ADMIN_TOKEN: test

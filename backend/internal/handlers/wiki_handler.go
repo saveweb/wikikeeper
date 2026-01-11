@@ -402,7 +402,6 @@ func (h *WikiHandler) CheckArchive(c echo.Context) error {
 	archiveService := services.NewArchiveService(
 		time.Duration(h.config.HTTPTimeout)*time.Second,
 		h.config.HTTPUserAgent,
-		h.config.ArchiveCheckDelay,
 	)
 
 	// Check Archive.org (async)

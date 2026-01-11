@@ -101,11 +101,6 @@ func (h *AdminHandler) CollectAll(c echo.Context) error {
 			} else {
 				successCount++
 			}
-
-			// Rate limiting delay
-			if i < len(wikis)-1 && h.config.CollectDelay > 0 {
-				time.Sleep(time.Duration(h.config.CollectDelay * float64(time.Second)))
-			}
 		}
 
 		applogger.Log.Info("[Admin] Collection completed", "success", successCount, "errors", errorCount)
@@ -138,7 +133,6 @@ func (h *AdminHandler) CheckAllArchives(c echo.Context) error {
 		archiveService := services.NewArchiveService(
 			time.Duration(h.config.HTTPTimeout)*time.Second,
 			h.config.HTTPUserAgent,
-			h.config.ArchiveCheckDelay,
 		)
 
 		successCount := 0
@@ -169,13 +163,6 @@ func (h *AdminHandler) CheckAllArchives(c echo.Context) error {
 			} else {
 				applogger.Log.Info("[Admin] Archive check completed", "found", found, "imported", imported, "updated", updated)
 				successCount++
-			}
-
-			// Rate limiting delay
-			if i < len(wikis)-1 && h.config.ArchiveCheckDelay > 0 {
-				delay := time.Duration(h.config.ArchiveCheckDelay * float64(time.Second))
-				applogger.Log.Info("[Admin] Waiting before next wiki", "delay", delay)
-				time.Sleep(delay)
 			}
 		}
 
@@ -208,18 +195,18 @@ func (h *AdminHandler) GetWikiStats(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"wiki_id":                idStr,
-		"url":                    wiki.URL,
-		"sitename":               wiki.Sitename,
-		"status":                 wiki.Status,
-		"is_active":              wiki.IsActive,
-		"last_check_at":          wiki.LastCheckAt,
-		"last_error":             wiki.LastError,
-		"last_error_at":          wiki.LastErrorAt,
-		"archive_last_check_at":  wiki.ArchiveLastCheckAt,
-		"archive_last_error":     wiki.ArchiveLastError,
-		"archive_last_error_at":  wiki.ArchiveLastErrorAt,
-		"has_archive":            wiki.HasArchive,
-		"api_available":          wiki.APIAvailable,
+		"wiki_id":               idStr,
+		"url":                   wiki.URL,
+		"sitename":              wiki.Sitename,
+		"status":                wiki.Status,
+		"is_active":             wiki.IsActive,
+		"last_check_at":         wiki.LastCheckAt,
+		"last_error":            wiki.LastError,
+		"last_error_at":         wiki.LastErrorAt,
+		"archive_last_check_at": wiki.ArchiveLastCheckAt,
+		"archive_last_error":    wiki.ArchiveLastError,
+		"archive_last_error_at": wiki.ArchiveLastErrorAt,
+		"has_archive":           wiki.HasArchive,
+		"api_available":         wiki.APIAvailable,
 	})
 }

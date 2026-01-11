@@ -19,7 +19,6 @@ type ArchiveScheduler struct {
 	db             *gorm.DB
 	archiveService *ArchiveService
 	config         *config.Config
-	ticker         *time.Ticker
 	stopCh         chan struct{}
 	wg             sync.WaitGroup
 	mu             sync.Mutex
@@ -49,19 +48,7 @@ func (s *ArchiveScheduler) Start(ctx context.Context) {
 
 	s.running = true
 
-	// Calculate interval from config (default 12 hours)
-	interval := time.Duration(s.config.ArchiveCheckInterval) * time.Minute
-	if interval == 0 {
-		interval = 12 * 60 * time.Minute // Default: 12 hours
-	}
-
-	s.ticker = time.NewTicker(interval)
-
-	archiveSchedulerLog.Info("Started with interval", "interval", interval)
-
-	// Run initial archive check
-	s.wg.Add(1)
-	go s.run(ctx)
+	archiveSchedulerLog.Info("Started")
 
 	// Start periodic archive checking
 	s.wg.Add(1)
@@ -79,10 +66,6 @@ func (s *ArchiveScheduler) Stop() {
 
 	archiveSchedulerLog.Info("Stopping...")
 
-	if s.ticker != nil {
-		s.ticker.Stop()
-	}
-
 	close(s.stopCh)
 	s.wg.Wait()
 
@@ -92,8 +75,6 @@ func (s *ArchiveScheduler) Stop() {
 
 // run executes a single archive check cycle
 func (s *ArchiveScheduler) run(ctx context.Context) {
-	defer s.wg.Done()
-
 	archiveSchedulerLog.Info("Starting archive check cycle")
 
 	startTime := time.Now()
@@ -109,14 +90,12 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 		OrderBy: "archive_last_check_at ASC NULLS FIRST",
 	})
 	if err != nil {
-		archiveSchedulerLog.Info("Failed to get wikis", "error", err)
+		archiveSchedulerLog.Error("Failed to get wikis", "error", err)
 		return
 	}
 
-	totalWikis := len(wikis)
-	archiveSchedulerLog.Info("Found wikis to check archives", "total", totalWikis)
-
-	if totalWikis == 0 {
+	if len(wikis) == 0 {
+		archiveSchedulerLog.Warn("Found wikis to check archives", "total", len(wikis))
 		return
 	}
 
@@ -129,7 +108,7 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 		// Check if we should stop
 		select {
 		case <-s.stopCh:
-			archiveSchedulerLog.Info("Archive check cycle interrupted")
+			archiveSchedulerLog.Warn("Archive check cycle interrupted")
 			return
 		default:
 		}
@@ -141,7 +120,7 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 			continue
 		}
 
-		archiveSchedulerLog.Info("Checking wiki", "index", i+1, "total", totalWikis, "url", wiki.URL)
+		archiveSchedulerLog.Info("Checking wiki", "index", i+1, "total", len(wikis), "url", wiki.URL)
 
 		// Check archives for this wiki
 		apiURL := *wiki.APIURL
@@ -159,18 +138,6 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 			archiveSchedulerLog.Info("Archive check completed", "found", found, "imported", imported, "updated", updated)
 			successCount++
 		}
-
-		// Rate limiting delay
-		if i < totalWikis-1 && s.config.ArchiveCheckDelay > 0 {
-			delay := time.Duration(s.config.ArchiveCheckDelay * float64(time.Second))
-			archiveSchedulerLog.Info("Waiting before next wiki", "delay", delay)
-			select {
-			case <-time.After(delay):
-			case <-s.stopCh:
-				archiveSchedulerLog.Info("Archive check cycle interrupted during delay")
-				return
-			}
-		}
 	}
 
 	elapsed := time.Since(startTime)
@@ -182,6 +149,8 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 func (s *ArchiveScheduler) periodicRun(ctx context.Context) {
 	defer s.wg.Done()
 
+	ticker := time.NewTimer(10 * time.Millisecond)
+
 	for {
 		select {
 		case <-s.stopCh:
@@ -190,7 +159,7 @@ func (s *ArchiveScheduler) periodicRun(ctx context.Context) {
 		case <-ctx.Done():
 			archiveSchedulerLog.Info("Context cancelled")
 			return
-		case <-s.ticker.C:
+		case <-ticker.C:
 			// Check the oldest archive_last_check_at before running
 			wikiRepo := repository.NewWikiRepository(s.db)
 			wikis, _, err := wikiRepo.List(ctx, repository.ListOptions{
@@ -200,58 +169,35 @@ func (s *ArchiveScheduler) periodicRun(ctx context.Context) {
 				OrderBy:  "archive_last_check_at ASC NULLS FIRST",
 			})
 			if err != nil {
-				archiveSchedulerLog.Info("Failed to check wikis", "error", err)
+				archiveSchedulerLog.Error("Failed to list wikis", "error", err, "sleep", time.Minute)
+				ticker.Reset(time.Minute)
+				continue
+			}
+
+			if len(wikis) == 0 {
+				archiveSchedulerLog.Info("No wikis found for archive checking", "sleep", time.Minute)
+				ticker.Reset(time.Minute)
 				continue
 			}
 
 			// Check if we need to back off
-			if len(wikis) > 0 && wikis[0].ArchiveLastCheckAt != nil {
+			if wikis[0].ArchiveLastCheckAt != nil {
 				timeSinceLastCheck := time.Since(*wikis[0].ArchiveLastCheckAt)
 				backoffThreshold := 3 * 24 * time.Hour // 3 days
 
 				if timeSinceLastCheck < backoffThreshold {
-					// Calculate backoff time based on how recent the last check was
-					// More recent = longer backoff (up to 60s max)
-					hoursSinceCheck := timeSinceLastCheck.Hours()
-					var backoffTime time.Duration
-					if hoursSinceCheck < 24 {
-						backoffTime = 60 * time.Second // checked within 24h, max backoff
-					} else if hoursSinceCheck < 48 {
-						backoffTime = 45 * time.Second // checked within 48h
-					} else {
-						backoffTime = 30 * time.Second // checked within 72h
-					}
+					backoffTime := time.Hour
 					archiveSchedulerLog.Info("Backing off, recent update detected",
 						"last_check", wikis[0].ArchiveLastCheckAt,
-						"hours_since", hoursSinceCheck,
+						"since", timeSinceLastCheck,
 						"backoff", backoffTime)
-					// Skip this cycle, will retry after configured interval
+					ticker.Reset(backoffTime)
 					continue
 				}
 			}
 
-			archiveSchedulerLog.Info("Triggering archive check")
-			s.wg.Add(1)
-			go s.run(ctx)
+			ticker.Reset(10 * time.Millisecond)
+			s.run(ctx)
 		}
 	}
-}
-
-// IsRunning returns whether the scheduler is currently running
-func (s *ArchiveScheduler) IsRunning() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.running
-}
-
-// TriggerManualRun manually triggers an archive check cycle
-func (s *ArchiveScheduler) TriggerManualRun(ctx context.Context) {
-	if !s.IsRunning() {
-		archiveSchedulerLog.Info("Cannot trigger run: scheduler not running")
-		return
-	}
-
-	archiveSchedulerLog.Info("Manual archive check triggered")
-	s.wg.Add(1)
-	go s.run(ctx)
 }

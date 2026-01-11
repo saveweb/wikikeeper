@@ -23,20 +23,18 @@ var archiveLog = applogger.With("component", "archive")
 
 // ArchiveService checks Archive.org for wiki backups
 type ArchiveService struct {
-	timeout    time.Duration
-	userAgent  string
-	checkDelay time.Duration // Delay between Archive.org checks
+	timeout   time.Duration
+	userAgent string
 }
 
 // NewArchiveService creates a new Archive service instance
-func NewArchiveService(timeout time.Duration, userAgent string, checkDelay float64) *ArchiveService {
+func NewArchiveService(timeout time.Duration, userAgent string) *ArchiveService {
 	if userAgent == "" {
-		userAgent = "WikiKeeper/1.0"
+		userAgent = "WikiKeeper/unknown"
 	}
 	return &ArchiveService{
-		timeout:    timeout,
-		userAgent:  userAgent,
-		checkDelay: time.Duration(checkDelay * float64(time.Second)),
+		timeout:   timeout,
+		userAgent: userAgent,
 	}
 }
 

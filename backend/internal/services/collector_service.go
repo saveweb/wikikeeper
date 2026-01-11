@@ -122,16 +122,16 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 	responseTime := siteinfo.ResponseTime
 	httpStatus := siteinfo.HTTPStatus
 	stats := &models.WikiStats{
-		WikiID:        wikiID,
-		Time:          now,
-		Pages:         siteinfo.Statistics.Pages,
-		Articles:      siteinfo.Statistics.Articles,
-		Edits:         siteinfo.Statistics.Edits,
-		Images:        siteinfo.Statistics.Images,
-		Users:         siteinfo.Statistics.Users,
-		ActiveUsers:   siteinfo.Statistics.ActiveUsers,
-		Admins:        siteinfo.Statistics.Admins,
-		Jobs:          siteinfo.Statistics.Jobs,
+		WikiID:         wikiID,
+		Time:           now,
+		Pages:          siteinfo.Statistics.Pages,
+		Articles:       siteinfo.Statistics.Articles,
+		Edits:          siteinfo.Statistics.Edits,
+		Images:         siteinfo.Statistics.Images,
+		Users:          siteinfo.Statistics.Users,
+		ActiveUsers:    siteinfo.Statistics.ActiveUsers,
+		Admins:         siteinfo.Statistics.Admins,
+		Jobs:           siteinfo.Statistics.Jobs,
 		ResponseTimeMs: &responseTime,
 		HTTPStatus:     &httpStatus,
 	}

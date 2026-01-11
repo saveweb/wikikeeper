@@ -58,7 +58,6 @@ func main() {
 	archiveService := services.NewArchiveService(
 		time.Duration(cfg.HTTPTimeout)*time.Second,
 		cfg.HTTPUserAgent,
-		cfg.ArchiveCheckDelay,
 	)
 
 	// Start siteinfo scheduler

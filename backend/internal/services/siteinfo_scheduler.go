@@ -21,12 +21,10 @@ type SiteInfoScheduler struct {
 	mwService      *MediaWikiService
 	archiveService *ArchiveService
 	config         *config.Config
-	ticker         *time.Ticker
 	stopCh         chan struct{}
 	wg             sync.WaitGroup
 	mu             sync.Mutex
 	running        bool
-	nextRun        time.Time
 }
 
 // NewSiteInfoScheduler creates a new siteinfo scheduler instance
@@ -53,20 +51,7 @@ func (s *SiteInfoScheduler) Start(ctx context.Context) {
 
 	s.running = true
 
-	// Calculate interval from config (default 1 hour)
-	interval := time.Duration(s.config.CollectInterval) * time.Minute
-	if interval == 0 {
-		interval = 60 * time.Minute // Default: 1 hour
-	}
-
-	s.ticker = time.NewTicker(interval)
-	s.nextRun = time.Now().Add(interval)
-
-	siteinfoSchedulerLog.Info("siteinfo scheduler started", "interval", interval)
-
-	// Run initial collection
-	s.wg.Add(1)
-	go s.run(ctx)
+	siteinfoSchedulerLog.Info("siteinfo scheduler started")
 
 	// Start periodic collection
 	s.wg.Add(1)
@@ -84,10 +69,6 @@ func (s *SiteInfoScheduler) Stop() {
 
 	siteinfoSchedulerLog.Info("stopping siteinfo scheduler")
 
-	if s.ticker != nil {
-		s.ticker.Stop()
-	}
-
 	close(s.stopCh)
 	s.wg.Wait()
 
@@ -97,8 +78,6 @@ func (s *SiteInfoScheduler) Stop() {
 
 // run executes a single collection cycle
 func (s *SiteInfoScheduler) run(ctx context.Context) {
-	defer s.wg.Done()
-
 	siteinfoSchedulerLog.Info("starting collection cycle")
 
 	startTime := time.Now()
@@ -108,7 +87,7 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 	wikiRepo := repository.NewWikiRepository(s.db)
 	wikis, _, err := wikiRepo.List(ctx, repository.ListOptions{
 		Page:     1,
-		PageSize: int(s.config.CollectBatchSize),
+		PageSize: int(s.config.SiteinfoCheckBatchSize),
 		Status:   nil, // Get all statuses
 		// Order by last_check_at ASC (NULL first, then oldest)
 		OrderBy: "last_check_at ASC NULLS FIRST",
@@ -172,7 +151,6 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 // periodicRun runs collection continuously with backoff based on last_check_at
 func (s *SiteInfoScheduler) periodicRun(ctx context.Context) {
 	defer s.wg.Done()
-
 	for {
 		select {
 		case <-s.stopCh:
@@ -181,7 +159,7 @@ func (s *SiteInfoScheduler) periodicRun(ctx context.Context) {
 		case <-ctx.Done():
 			siteinfoSchedulerLog.Info("context cancelled")
 			return
-		case <-s.ticker.C:
+		default:
 			// Check the oldest last_check_at before running
 			wikiRepo := repository.NewWikiRepository(s.db)
 			wikis, _, err := wikiRepo.List(ctx, repository.ListOptions{
@@ -195,61 +173,31 @@ func (s *SiteInfoScheduler) periodicRun(ctx context.Context) {
 				continue
 			}
 
+			if len(wikis) == 0 {
+				siteinfoSchedulerLog.Info("no wikis found for checking", "sleep", time.Minute)
+				time.Sleep(time.Minute)
+				continue
+			}
+
 			// Check if we need to back off
-			if len(wikis) > 0 && wikis[0].LastCheckAt != nil {
+			if wikis[0].LastCheckAt != nil {
 				timeSinceLastCheck := time.Since(*wikis[0].LastCheckAt)
 				backoffThreshold := 3 * 24 * time.Hour // 3 days
 
 				if timeSinceLastCheck < backoffThreshold {
-					// Calculate backoff time based on how recent the last check was
-					// More recent = longer backoff (up to 60s max)
-					hoursSinceCheck := timeSinceLastCheck.Hours()
-					var backoffTime time.Duration
-					if hoursSinceCheck < 24 {
-						backoffTime = 60 * time.Second // checked within 24h, max backoff
-					} else if hoursSinceCheck < 48 {
-						backoffTime = 45 * time.Second // checked within 48h
-					} else {
-						backoffTime = 30 * time.Second // checked within 72h
-					}
+					backoffTime := time.Hour
 					siteinfoSchedulerLog.Info("backing off, recent update detected",
 						"last_check", wikis[0].LastCheckAt,
-						"hours_since", hoursSinceCheck,
+						"since", timeSinceLastCheck,
 						"backoff", backoffTime)
-					// Skip this cycle, will retry after configured interval
+
+					time.Sleep(backoffTime)
 					continue
 				}
 			}
 
-			siteinfoSchedulerLog.Info("triggering collection")
-			s.wg.Add(1)
-			go s.run(ctx)
+			siteinfoSchedulerLog.Debug("triggering collection")
+			s.run(ctx)
 		}
 	}
-}
-
-// IsRunning returns whether the scheduler is currently running
-func (s *SiteInfoScheduler) IsRunning() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.running
-}
-
-// GetNextRun returns the next scheduled run time
-func (s *SiteInfoScheduler) GetNextRun() time.Time {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.nextRun
-}
-
-// TriggerManualRun manually triggers a collection cycle
-func (s *SiteInfoScheduler) TriggerManualRun(ctx context.Context) {
-	if !s.IsRunning() {
-		siteinfoSchedulerLog.Warn("cannot trigger run: scheduler not running")
-		return
-	}
-
-	siteinfoSchedulerLog.Info("manual collection triggered")
-	s.wg.Add(1)
-	go s.run(ctx)
 }
