@@ -78,5 +78,4 @@ scripts/__pycache__/
 1
 
 # Database dumps
-*.sql
 data/

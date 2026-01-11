@@ -7,8 +7,8 @@
 		frontend-install frontend-dev frontend-build
 
 # Docker compose configuration
-DC_ROOT := docker-compose -f ../docker-compose.yml
-DC_DEV := docker-compose -f ../docker-compose.dev.yml
+DC_ROOT := docker compose -f ../docker-compose.yml
+DC_DEV := docker compose -f ../docker-compose.dev.yml
 
 # Database configuration (matches docker-compose.dev.yml)
 DB_HOST ?= localhost
@@ -175,7 +175,10 @@ db-reset: ## Reset database (drop, create, migrate)
 
 db-migrate: ## Run database migrations
 	@echo "🔄 Running database migrations..."
-	docker exec -i wikikeeper-postgres-dev psql -U wikikeeper -d wikikeeper < migrations/001_init_schema.up.sql
+	@for migration in migrations/*.up.sql; do \
+		echo "Executing $$migration..."; \
+		docker exec -i wikikeeper-postgres-dev psql -U wikikeeper -d wikikeeper < $$migration; \
+	done
 	@echo "✅ Migrations complete!"
 
 db-migrate-create: ## Create a new migration (use NAME=migration_name)

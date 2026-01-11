@@ -45,6 +45,7 @@ type MediaWikiClient struct {
 type SiteInfo struct {
 	General      SiteInfoGeneral
 	Statistics   SiteInfoStatistics
+	Extensions   SiteInfoExtensions
 	ResponseTime int // Response time in milliseconds
 	HTTPStatus   int // HTTP status code
 }
@@ -73,11 +74,27 @@ type SiteInfoStatistics struct {
 	Jobs        int `json:"jobs"`
 }
 
+// SiteInfoExtensions contains extensions and skins
+type SiteInfoExtensions struct {
+	Extensions []ExtensionInfo
+	Skins      []ExtensionInfo
+}
+
+// ExtensionInfo represents a single extension or skin
+type ExtensionInfo struct {
+	Type       string  `json:"type"`        // "extension", "skin", "parserhook", etc.
+	Name       string  `json:"name"`
+	URL        *string `json:"url,omitempty"`
+	Version    *string `json:"version,omitempty"`
+	LicenseName *string `json:"license-name,omitempty"`
+}
+
 // API response structures
 type mediawikiResponse struct {
 	Query struct {
 		General    map[string]interface{} `json:"general"`
 		Statistics map[string]interface{} `json:"statistics"`
+		Extensions []interface{}          `json:"extensions"`
 	} `json:"query"`
 	Error *struct {
 		Code string `json:"code"`
@@ -127,9 +144,9 @@ func (s *MediaWikiService) FetchSiteinfo(ctx context.Context, client *MediaWikiC
 		return nil, NewMediaWikiError("fetch_siteinfo", client.URL, ErrMediaWikiNotFound)
 	}
 
-	// Build API request URL with both general and statistics
+	// Build API request URL with general, statistics, and extensions
 	apiURL := *client.APIURL
-	reqURL := fmt.Sprintf("%s?action=query&meta=siteinfo&siprop=general|statistics&format=json", apiURL)
+	reqURL := fmt.Sprintf("%s?action=query&meta=siteinfo&siprop=general|statistics|extensions&format=json", apiURL)
 
 	start := time.Now()
 	resp, err := s.makeRequest(ctx, reqURL)
@@ -162,9 +179,21 @@ func (s *MediaWikiService) FetchSiteinfo(ctx context.Context, client *MediaWikiC
 		return nil, NewMediaWikiError("parse_statistics", client.URL, err)
 	}
 
+	// Parse extensions
+	extensions, err := parseExtensions(mwResp.Query.Extensions)
+	if err != nil {
+		// Don't fail on extensions parse error, just log and continue with empty extensions
+		mediaWikiLog.Info("Failed to parse extensions", "err", err)
+		extensions = &SiteInfoExtensions{
+			Extensions: []ExtensionInfo{},
+			Skins:      []ExtensionInfo{},
+		}
+	}
+
 	siteinfo := &SiteInfo{
 		General:      *general,
 		Statistics:   *stats,
+		Extensions:   *extensions,
 		ResponseTime: int(elapsed.Milliseconds()),
 		HTTPStatus:   resp.StatusCode,
 	}
@@ -489,4 +518,90 @@ func parseSiteInfoStatistics(data map[string]interface{}) (*SiteInfoStatistics, 
 	stats.Jobs = getInt("jobs")
 
 	return stats, nil
+}
+
+// parseExtensions parses extensions from API response
+func parseExtensions(data []interface{}) (*SiteInfoExtensions, error) {
+	extensions := &SiteInfoExtensions{
+		Extensions: []ExtensionInfo{},
+		Skins:      []ExtensionInfo{},
+	}
+
+	// MediaWiki API returns extensions as a list
+	if len(data) == 0 {
+		// No extensions data, return empty lists
+		return extensions, nil
+	}
+
+	extList := data
+
+	// Track seen extensions to avoid duplicates from API
+	seenExtensions := make(map[string]bool)
+	seenSkins := make(map[string]bool)
+	duplicatesCount := 0
+
+	for _, extItem := range extList {
+		extMap, ok := extItem.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		info := ExtensionInfo{}
+
+		// Parse type (required)
+		if v, ok := extMap["type"].(string); ok {
+			info.Type = v
+		} else {
+			// Skip if type is missing
+			continue
+		}
+
+		// Parse name (required)
+		if v, ok := extMap["name"].(string); ok {
+			info.Name = v
+		} else {
+			// Skip if name is missing
+			continue
+		}
+
+		// Parse optional fields
+		if v, ok := extMap["url"].(string); ok && v != "" {
+			info.URL = &v
+		}
+		if v, ok := extMap["version"].(string); ok && v != "" {
+			info.Version = &v
+		}
+		if v, ok := extMap["license-name"].(string); ok && v != "" {
+			info.LicenseName = &v
+		}
+
+		// Categorize by type and deduplicate
+		key := info.Type + ":" + info.Name
+		if info.Type == "skin" {
+			if !seenSkins[key] {
+				seenSkins[key] = true
+				extensions.Skins = append(extensions.Skins, info)
+			} else {
+				duplicatesCount++
+				mediaWikiLog.Info("Duplicate skin found", "type", info.Type, "name", info.Name)
+			}
+		} else {
+			// All other types (extension, parserhook, etc.) go to extensions
+			if !seenExtensions[key] {
+				seenExtensions[key] = true
+				extensions.Extensions = append(extensions.Extensions, info)
+			} else {
+				duplicatesCount++
+				mediaWikiLog.Info("Duplicate extension found", "type", info.Type, "name", info.Name)
+			}
+		}
+	}
+
+	if duplicatesCount > 0 {
+		mediaWikiLog.Info("Removed duplicates from API", "duplicates", duplicatesCount,
+			"unique_extensions", len(extensions.Extensions),
+			"unique_skins", len(extensions.Skins))
+	}
+
+	return extensions, nil
 }

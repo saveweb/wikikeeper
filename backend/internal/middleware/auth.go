@@ -16,6 +16,12 @@ func AdminAuth(cfg *config.Config) echo.MiddlewareFunc {
 				return next(c)
 			}
 
+			// Dev mode bypass: if admin token is "test", skip all auth checks
+			// This avoids cross-site cookie issues in local development
+			if cfg.AdminToken == "test" {
+				return next(c)
+			}
+
 			// Get token from cookie
 			cookie, err := c.Cookie("admintoken")
 			if err != nil {
@@ -41,8 +47,13 @@ func AdminAuth(cfg *config.Config) echo.MiddlewareFunc {
 func CheckRateLimit(checkType string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// If user has admin token, skip rate limit
+			// If config has admin token set to "test", skip all rate limits
 			if cfg := c.Get("config").(*config.Config); cfg != nil {
+				if cfg.AdminToken == "test" {
+					return next(c)
+				}
+
+				// If user has valid admin token cookie, skip rate limit
 				if cookie, err := c.Cookie("admintoken"); err == nil {
 					if cookie.Value == cfg.AdminToken && cfg.AdminToken != "" {
 						return next(c)

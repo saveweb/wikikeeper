@@ -70,8 +70,15 @@ func (h *AuthHandler) Callback(c echo.Context) error {
 // Check handles GET /api/auth/check
 // This endpoint checks if the user has a valid admin token cookie
 func (h *AuthHandler) Check(c echo.Context) error {
+	// If no admin token configured, not authenticated
 	if h.config.AdminToken == "" {
 		return c.JSON(http.StatusOK, map[string]bool{"authenticated": false})
+	}
+
+	// Dev mode bypass: if admin token is "test", always return authenticated
+	// This avoids cross-site cookie issues in local development
+	if h.config.AdminToken == "test" {
+		return c.JSON(http.StatusOK, map[string]bool{"authenticated": true})
 	}
 
 	cookie, err := c.Cookie("admintoken")

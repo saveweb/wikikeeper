@@ -2,16 +2,24 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { wikiService } from '$lib/services';
+	import { extensionsService } from '$lib/services/extensions.service';
 	import LoadingSpinner from '$lib/components/common/LoadingSpinner.svelte';
 	import StatusBadge from '$lib/components/wiki/StatusBadge.svelte';
 	import StatsChart from '$lib/components/charts/StatsChart.svelte';
+	import ExtensionsList from '$lib/components/extensions/ExtensionsList.svelte';
+	import TimeRangeSelector from '$lib/components/extensions/TimeRangeSelector.svelte';
 	import { formatRelativeTime, formatShortDate, formatFileSize } from '$lib/utils/date';
 	import { APP_CONFIG } from '$lib/constants';
 	import type { Wiki, WikiStats, WikiArchive } from '$lib/types';
+	import type { WikiExtensionsSnapshot } from '$lib/types/extensions';
 
 	let wiki = $state<Wiki | null>(null);
 	let stats = $state<WikiStats[]>([]);
 	let archives = $state<WikiArchive[]>([]);
+	let currentExtensions = $state<WikiExtensionsSnapshot | null>(null);
+	let extensionsHistory = $state<WikiExtensionsSnapshot[]>([]);
+	let extensionsLoading = $state(false);
+	let extensionsError = $state('');
 	let loading = $state(true);
 	let error = $state('');
 	let checkingStats = $state(false);
@@ -28,6 +36,7 @@
 
 	onMount(async () => {
 		await loadData();
+		await loadExtensions();
 	});
 
 	async function loadData() {
@@ -48,6 +57,30 @@
 			error = (err as any)?.detail || (err as Error)?.message || 'Failed to load wiki data';
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function loadExtensions() {
+		if (!wiki) return;
+		extensionsLoading = true;
+		extensionsError = '';
+		try {
+			const latest = await extensionsService.getLatest(wiki.id);
+			currentExtensions = latest;
+		} catch (err) {
+			extensionsError = (err as any)?.detail || (err as Error)?.message || 'Failed to load extensions';
+		} finally {
+			extensionsLoading = false;
+		}
+	}
+
+	async function loadExtensionsHistory(from: string, to: string) {
+		if (!wiki) return;
+		try {
+			const history = await extensionsService.getHistory(wiki.id, from, to);
+			extensionsHistory = history.snapshots;
+		} catch (err) {
+			console.error('Failed to load extensions history:', err);
 		}
 	}
 
@@ -110,7 +143,7 @@
 	{:else if wiki}
 		<!-- Header -->
 		<div class="mb-8">
-			<div class="flex items-start gap-6">
+			<div class="flex flex-col sm:flex-row items-start gap-6">
 				<!-- Large Thumbnail -->
 				<img
 					src={`${APP_CONFIG.apiBaseUrl}/api/wikis/${wiki.id}/thumbnail`}
@@ -118,7 +151,7 @@
 					class="h-24 w-24 rounded-lg object-cover flex-shrink-0 shadow-lg"
 				/>
 				<div class="flex-1">
-					<div class="flex items-start justify-between">
+					<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
 						<div>
 							<h1 class="text-3xl font-bold text-gray-900">
 								{wiki.sitename || 'Unnamed Wiki'}
@@ -128,8 +161,18 @@
 									{wiki.url}
 								</a>
 							</p>
+							<div class="mt-2 flex flex-wrap items-center gap-2">
+								<StatusBadge status={wiki.status} />
+								<span
+									class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {wiki.has_archive
+										? 'bg-green-100 text-green-800'
+										: 'bg-gray-100 text-gray-800'}"
+								>
+									{wiki.has_archive ? 'Has Archive' : 'No Archive'}
+								</span>
+							</div>
 						</div>
-						<div class="flex gap-3">
+						<div class="flex flex-wrap gap-3">
 							<button
 								onclick={triggerCheck}
 								disabled={checkingStats}
@@ -175,90 +218,80 @@
 						</div>
 					</div>
 				</div>
-				<div class="mt-4 flex flex-wrap items-center gap-4">
-					<StatusBadge status={wiki.status} />
-					<span
-						class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {wiki.has_archive
-							? 'bg-green-100 text-green-800'
-							: 'bg-gray-100 text-gray-800'}"
-					>
-						{wiki.has_archive ? 'Has Archive' : 'No Archive'}
-					</span>
+			</div>
+
+			<!-- Status Information -->
+			<div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+				<!-- Siteinfo Status -->
+				<div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+					<h3 class="text-sm font-medium text-blue-900 mb-2">
+						📊 Siteinfo
+					</h3>
+					{#if wiki.last_check_at}
+						<p class="text-xs text-blue-700 mb-1">
+							Last checked: {formatRelativeTime(wiki.last_check_at)}
+						</p>
+					{:else}
+						<p class="text-xs text-blue-700 mb-1">
+							Not yet checked
+						</p>
+					{/if}
+					{#if wiki.last_error}
+						<div class="mt-2">
+							<p class="text-xs font-medium text-red-700 mb-1">
+								❌ Error
+								{#if wiki.last_error_at}
+									<span class="text-xs text-red-600 ml-1">
+										({formatRelativeTime(wiki.last_error_at)})
+									</span>
+								{/if}
+							</p>
+							<p class="text-xs text-red-600 break-words">
+								{wiki.last_error}
+							</p>
+						</div>
+					{:else if wiki.last_check_at}
+						<p class="text-xs text-green-700">
+							✅ Last check successful
+						</p>
+					{/if}
 				</div>
 
-				<!-- Status Information -->
-				<div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-					<!-- Siteinfo Status -->
-					<div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-						<h3 class="text-sm font-medium text-blue-900 mb-2">
-							📊 Siteinfo
-						</h3>
-						{#if wiki.last_check_at}
-							<p class="text-xs text-blue-700 mb-1">
-								Last checked: {formatRelativeTime(wiki.last_check_at)}
+				<!-- Archive Check Status -->
+				<div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
+					<h3 class="text-sm font-medium text-purple-900 mb-2">
+						📦 Archive.org Check
+					</h3>
+					{#if wiki.archive_last_check_at}
+						<p class="text-xs text-purple-700 mb-1">
+							Last checked: {formatRelativeTime(wiki.archive_last_check_at)}
+						</p>
+					{:else}
+						<p class="text-xs text-purple-700 mb-1">
+							Not yet checked
+						</p>
+					{/if}
+					{#if wiki.archive_last_error}
+						<div class="mt-2">
+							<p class="text-xs font-medium text-red-700 mb-1">
+								❌ Error
+								{#if wiki.archive_last_error_at}
+									<span class="text-xs text-red-600 ml-1">
+										({formatRelativeTime(wiki.archive_last_error_at)})
+									</span>
+								{/if}
 							</p>
-						{:else}
-							<p class="text-xs text-blue-700 mb-1">
-								Not yet checked
+							<p class="text-xs text-red-600 break-words">
+								{wiki.archive_last_error}
 							</p>
-						{/if}
-						{#if wiki.last_error}
-							<div class="mt-2">
-								<p class="text-xs font-medium text-red-700 mb-1">
-									❌ Error
-									{#if wiki.last_error_at}
-										<span class="text-xs text-red-600 ml-1">
-											({formatRelativeTime(wiki.last_error_at)})
-										</span>
-									{/if}
-								</p>
-								<p class="text-xs text-red-600 break-words">
-									{wiki.last_error}
-								</p>
-							</div>
-						{:else if wiki.last_check_at}
-							<p class="text-xs text-green-700">
-								✅ Last check successful
-							</p>
-						{/if}
-					</div>
-
-					<!-- Archive Check Status -->
-					<div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
-						<h3 class="text-sm font-medium text-purple-900 mb-2">
-							📦 Archive.org Check
-						</h3>
-						{#if wiki.archive_last_check_at}
-							<p class="text-xs text-purple-700 mb-1">
-								Last checked: {formatRelativeTime(wiki.archive_last_check_at)}
-							</p>
-						{:else}
-							<p class="text-xs text-purple-700 mb-1">
-								Not yet checked
-							</p>
-						{/if}
-						{#if wiki.archive_last_error}
-							<div class="mt-2">
-								<p class="text-xs font-medium text-red-700 mb-1">
-									❌ Error
-									{#if wiki.archive_last_error_at}
-										<span class="text-xs text-red-600 ml-1">
-											({formatRelativeTime(wiki.archive_last_error_at)})
-										</span>
-									{/if}
-								</p>
-								<p class="text-xs text-red-600 break-words">
-									{wiki.archive_last_error}
-								</p>
-							</div>
-						{:else if wiki.archive_last_check_at}
-							<p class="text-xs text-green-700">
-								✅ Last check successful
-							</p>
-						{/if}
-					</div>
+						</div>
+					{:else if wiki.archive_last_check_at}
+						<p class="text-xs text-green-700">
+							✅ Last check successful
+						</p>
+					{/if}
 				</div>
-		    </div>
+			</div>
 		</div>
 
 		<!-- Wiki Info -->
@@ -381,6 +414,68 @@
 		{#if stats.length > 0}
 			<div class="mb-8">
 				<StatsChart stats={stats} title="Statistics History (Last 30 Days)" height={chartHeight} />
+			</div>
+		{/if}
+
+		<!-- Extensions & Skins -->
+		{#if wiki}
+			<div class="mb-8">
+				<h2 class="text-xl font-semibold text-gray-900 mb-4">Extensions & Skins</h2>
+
+				{#if extensionsLoading}
+					<div class="flex justify-center items-center h-32">
+						<LoadingSpinner size="md" />
+					</div>
+				{:else if extensionsError}
+					<div class="bg-red-50 border border-red-200 rounded-md p-4">
+						<p class="text-sm text-red-700">{extensionsError}</p>
+					</div>
+				{:else if currentExtensions}
+					<div class="mb-4">
+						<TimeRangeSelector onTimeRangeChange={(from, to) => loadExtensionsHistory(from, to)} />
+					</div>
+
+					{#if extensionsHistory.length > 0}
+						<div class="mb-6">
+							<h3 class="text-sm font-medium text-gray-700 mb-3">
+								History ({extensionsHistory.length} snapshot{extensionsHistory.length !== 1 ? 's' : ''})
+							</h3>
+							<div class="space-y-2">
+								{#each extensionsHistory as snapshot (snapshot.id)}
+									<div class="border border-gray-200 rounded-lg p-3">
+										<div class="flex items-center justify-between">
+											<div>
+												<span class="text-sm font-medium text-gray-900">
+													{formatShortDate(snapshot.snapshot_at)}
+													{#if snapshot.valid_until}
+														→ {formatShortDate(snapshot.valid_until)}
+													{:else}
+														→ So far
+													{/if}
+												</span>
+												<span class="text-xs text-gray-500 ml-2">
+													{snapshot.items.length} items
+												</span>
+											</div>
+											{#if snapshot.id !== currentExtensions.id}
+												<button
+													onclick={() => (currentExtensions = snapshot)}
+													class="text-xs text-primary-600 hover:text-primary-700"
+												>
+													View →
+												</button>
+											{/if}
+										</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					<ExtensionsList items={currentExtensions.items} title="Current Extensions & Skins" mediawikiVersion={currentExtensions.mediawiki_version} />
+				{:else}
+					<p class="text-sm text-gray-500">No extensions data available yet. Trigger a stats check to collect extensions.</p>
+				{/if}
 			</div>
 		{/if}
 

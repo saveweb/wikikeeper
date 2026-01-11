@@ -140,6 +140,53 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 		return NewCollectorError("create_stats", err)
 	}
 
+	// Process extensions snapshot
+	extensionsRepo := repository.NewExtensionsRepository(s.db)
+
+	// Get latest snapshot for comparison
+	lastSnapshot, err := extensionsRepo.GetLatestSnapshot(ctx, wikiID)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		collectorLog.Info("Failed to get last extensions snapshot", "err", err)
+		// Continue anyway, we'll create a new snapshot
+	}
+
+	// Compare extensions
+	diff := CompareExtensionsFromSnapshot(lastSnapshot, &siteinfo.Extensions)
+
+	if diff.HasChanges || lastSnapshot == nil {
+		// Extensions changed or first collection, create new snapshot
+
+		// Close old snapshot if exists
+		if lastSnapshot != nil {
+			if err := extensionsRepo.CloseLatestSnapshot(ctx, wikiID, now); err != nil {
+				collectorLog.Info("Failed to close last snapshot", "err", err)
+			}
+		}
+
+		// Create new snapshot
+		items := flattenExtensions(&siteinfo.Extensions)
+		snapshot := &models.WikiExtensionsSnapshot{
+			WikiID:           wikiID,
+			SnapshotAt:       now,
+			ValidUntil:       nil,
+			MediaWikiVersion: &siteinfo.General.Generator,
+			Items:            items,
+		}
+
+		if err := extensionsRepo.CreateSnapshot(ctx, snapshot); err != nil {
+			collectorLog.Info("Failed to create extensions snapshot", "err", err)
+		} else {
+			collectorLog.Info("Extensions snapshot created",
+				"wiki_id", wikiID,
+				"extensions", len(siteinfo.Extensions.Extensions),
+				"skins", len(siteinfo.Extensions.Skins),
+				"added", len(diff.Added),
+				"removed", len(diff.Removed),
+				"modified", len(diff.Modified))
+		}
+	}
+	// If no changes, we don't need to update anything (snapshot remains valid)
+
 	collectorLog.Info("Collection completed",
 		"wiki_id", wikiID, "pages", siteinfo.Statistics.Pages, "edits", siteinfo.Statistics.Edits)
 

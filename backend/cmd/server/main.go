@@ -87,6 +87,7 @@ func main() {
 	statsHandler := handlers.NewStatsHandler(db, cfg)
 	adminHandler := handlers.NewAdminHandler(db, cfg)
 	authHandler := handlers.NewAuthHandler(cfg)
+	extensionsHandler := handlers.NewExtensionsHandler(db)
 
 	// Routes
 	e.GET("/", func(c echo.Context) error {
@@ -117,6 +118,8 @@ func main() {
 	api.GET("/wikis/:id/stats", wikiHandler.GetStats)
 	api.GET("/wikis/:id/archives", wikiHandler.GetArchives)
 	api.GET("/wikis/:id/thumbnail", wikiHandler.GetThumbnail)
+	api.GET("/wikis/:id/extensions", extensionsHandler.GetLatestExtensions)
+	api.GET("/wikis/:id/extensions/history", extensionsHandler.GetExtensionsHistory)
 
 	// Wiki routes - public POST with rate limiting
 	api.POST("/wikis", wikiHandler.Create)

@@ -45,6 +45,7 @@ services:
       COLLECT_DELAY: 1.5
       COLLECT_BATCH_SIZE: 50
       ARCHIVE_CHECK_DELAY: 0.5
+      ADMIN_TOKEN: test
     ports:
       - "8000:8000"
     volumes:

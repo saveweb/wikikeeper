@@ -490,6 +490,12 @@ func (h *WikiHandler) isAdmin(c echo.Context) bool {
 		return false
 	}
 
+	// Dev mode bypass: if admin token is "test", always return true
+	// This avoids cross-site cookie issues in local development
+	if h.config.AdminToken == "test" {
+		return true
+	}
+
 	// Check for admin token cookie
 	cookie, err := c.Cookie("admintoken")
 	if err != nil {
