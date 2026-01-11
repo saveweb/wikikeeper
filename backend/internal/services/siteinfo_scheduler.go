@@ -124,6 +124,20 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 			continue
 		}
 
+		// Skip recently checked wikis
+		if wiki.LastCheckAt != nil {
+			timeSinceLastCheck := time.Since(*wiki.LastCheckAt)
+			backoffThreshold := 3 * 24 * time.Hour // 3 days
+
+			if timeSinceLastCheck < backoffThreshold {
+				siteinfoSchedulerLog.Info("skipping wiki, recent update detected",
+					"url", wiki.URL,
+					"last_check", wiki.LastCheckAt,
+					"since", timeSinceLastCheck)
+				continue
+			}
+		}
+
 		siteinfoSchedulerLog.Info("processing wiki", "index", i+1, "total", totalWikis, "url", wiki.URL)
 
 		// Collect siteinfo
