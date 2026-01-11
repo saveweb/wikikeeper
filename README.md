@@ -17,4 +17,4 @@ The purpose of this project is simply to index MediaWiki sites for Wikiteam/Arch
 
 ## AI Slop Disclaimer
 
-I makes extensive use of AI shits for this project. If you want to contribute, please feel free to PR any AI slop you want, I don't care, at least for this project.
+I makes extensive use of AI shits for this repo. If you want to contribute, please feel free to PR any AI slop you want, I don't care, at least for this repo.
