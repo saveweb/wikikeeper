@@ -149,7 +149,7 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 func (s *ArchiveScheduler) periodicRun(ctx context.Context) {
 	defer s.wg.Done()
 
-	ticker := time.NewTimer(10 * time.Millisecond)
+	ticker := time.NewTimer(time.Second)
 
 	for {
 		select {
@@ -196,7 +196,7 @@ func (s *ArchiveScheduler) periodicRun(ctx context.Context) {
 				}
 			}
 
-			ticker.Reset(10 * time.Millisecond)
+			ticker.Reset(time.Second)
 			s.run(ctx)
 		}
 	}

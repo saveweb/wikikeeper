@@ -151,6 +151,8 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 // periodicRun runs collection continuously with backoff based on last_check_at
 func (s *SiteInfoScheduler) periodicRun(ctx context.Context) {
 	defer s.wg.Done()
+
+	ticker := time.NewTimer(time.Second)
 	for {
 		select {
 		case <-s.stopCh:
@@ -159,7 +161,7 @@ func (s *SiteInfoScheduler) periodicRun(ctx context.Context) {
 		case <-ctx.Done():
 			siteinfoSchedulerLog.Info("context cancelled")
 			return
-		default:
+		case <-ticker.C:
 			// Check the oldest last_check_at before running
 			wikiRepo := repository.NewWikiRepository(s.db)
 			wikis, _, err := wikiRepo.List(ctx, repository.ListOptions{
@@ -170,12 +172,13 @@ func (s *SiteInfoScheduler) periodicRun(ctx context.Context) {
 			})
 			if err != nil {
 				siteinfoSchedulerLog.Error("failed to check wikis", "error", err)
+				ticker.Reset(time.Minute)
 				continue
 			}
 
 			if len(wikis) == 0 {
 				siteinfoSchedulerLog.Info("no wikis found for checking", "sleep", time.Minute)
-				time.Sleep(time.Minute)
+				ticker.Reset(time.Minute)
 				continue
 			}
 
@@ -191,12 +194,12 @@ func (s *SiteInfoScheduler) periodicRun(ctx context.Context) {
 						"since", timeSinceLastCheck,
 						"backoff", backoffTime)
 
-					time.Sleep(backoffTime)
+					ticker.Reset(backoffTime)
 					continue
 				}
 			}
 
-			siteinfoSchedulerLog.Debug("triggering collection")
+			ticker.Reset(time.Second)
 			s.run(ctx)
 		}
 	}
