@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"net/url"
 	"sync"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"wikikeeper-backend/internal/config"
 	applogger "wikikeeper-backend/internal/logger"
 	"wikikeeper-backend/internal/metrics"
+	"wikikeeper-backend/internal/models"
 	"wikikeeper-backend/internal/repository"
 )
 
@@ -110,6 +112,10 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 
 	collector := NewCollectorService(s.db, s.mwService, s.config)
 
+	wg := sync.WaitGroup{}
+	lock := sync.Mutex{}
+	perHostInflight := make(map[string]int)
+
 	for i, wiki := range wikis {
 		// Check if we should stop
 		select {
@@ -138,17 +144,58 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 			}
 		}
 
-		siteinfoSchedulerLog.Info("processing wiki", "index", i+1, "total", totalWikis, "url", wiki.URL)
+		collect := func(wiki *models.Wiki, i int) {
+			defer wg.Done()
 
-		// Collect siteinfo
-		if err := collector.CollectSingleWiki(ctx, wiki.ID); err != nil {
-			siteinfoSchedulerLog.Error("failed to collect wiki", "id", wiki.ID, "url", wiki.URL, "error", err)
-			errorCount++
-			metrics.CollectionWikisFailed.Inc()
-		} else {
-			successCount++
+			host := "default"
+			parsed, err := url.Parse(wiki.URL)
+			if err == nil || parsed.Host == "" {
+				host = parsed.Host
+			}
+
+			defer func() {
+				// Release semaphore
+				lock.Lock()
+				perHostInflight[host]--
+				lock.Unlock()
+			}()
+
+			// Acquire semaphore for host
+			for {
+				lock.Lock()
+				inflight := perHostInflight[host]
+				if inflight < 3 { // Max 3 concurrent per host
+					perHostInflight[host] = inflight + 1
+					lock.Unlock()
+					break
+				}
+				lock.Unlock()
+				// Wait before retrying
+				time.Sleep(time.Second)
+			}
+
+			siteinfoSchedulerLog.Info("processing wiki", "index", i+1, "total", totalWikis, "url", wiki.URL)
+
+			// Collect siteinfo
+			if err := collector.CollectSingleWiki(ctx, wiki.ID); err != nil {
+				siteinfoSchedulerLog.Error("failed to collect wiki", "id", wiki.ID, "url", wiki.URL, "error", err)
+				errorCount++
+				metrics.CollectionWikisFailed.Inc()
+			} else {
+				successCount++
+			}
+			metrics.CollectionWikisProcessed.Inc()
 		}
-		metrics.CollectionWikisProcessed.Inc()
+		wg.Add(1)
+		go collect(wiki, i)
+	}
+	wg.Wait()
+	lock.Lock()
+	defer lock.Unlock()
+	for k, v := range perHostInflight {
+		if v > 0 {
+			panic("inflight not zero after wait: " + k)
+		}
 	}
 
 	// Update metrics
