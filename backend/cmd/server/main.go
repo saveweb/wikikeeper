@@ -42,6 +42,14 @@ func main() {
 
 	applogger.Log.Info("database connection successful")
 
+	// Run migrations
+	applogger.Log.Info("running database migrations")
+	if err := database.RunMigrations(db); err != nil {
+		applogger.Log.Error("failed to run migrations", "error", err)
+		os.Exit(1)
+	}
+	applogger.Log.Info("database migrations completed")
+
 	// Initialize services
 	mwService := services.NewMediaWikiService(
 		time.Duration(cfg.HTTPTimeout)*time.Second,
