@@ -37,15 +37,7 @@ func Init(level string) {
 		Level: slogLevel,
 	}
 
-	// Use JSON format in production, text in development
-	env := os.Getenv("DEBUG")
-	if env == "true" || env == "1" {
-		// Development: human-readable text format
-		Log = slog.New(slog.NewTextHandler(os.Stdout, opts))
-	} else {
-		// Production: JSON format
-		Log = slog.New(slog.NewJSONHandler(os.Stdout, opts))
-	}
+	Log = slog.New(slog.NewTextHandler(os.Stdout, opts))
 
 	// Set default logger
 	slog.SetDefault(Log)

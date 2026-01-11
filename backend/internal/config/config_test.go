@@ -31,10 +31,6 @@ func TestConfigLoad(t *testing.T) {
 	if c.HTTPTimeout != 30.0 {
 		t.Errorf("Expected HTTPTimeout 30.0, got %f", c.HTTPTimeout)
 	}
-
-	if c.Debug != false {
-		t.Errorf("Expected Debug false, got %v", c.Debug)
-	}
 }
 
 func TestConfigEnvOverride(t *testing.T) {
@@ -44,7 +40,6 @@ func TestConfigEnvOverride(t *testing.T) {
 	// Set environment variables
 	os.Setenv("APP_NAME", "TestTracker")
 	os.Setenv("PORT", "9000")
-	os.Setenv("DEBUG", "true")
 	os.Setenv("HTTP_TIMEOUT", "60.0")
 
 	// Load config
@@ -59,10 +54,6 @@ func TestConfigEnvOverride(t *testing.T) {
 		t.Errorf("Expected Port 9000, got %d", c.Port)
 	}
 
-	if c.Debug != true {
-		t.Errorf("Expected Debug true, got %v", c.Debug)
-	}
-
 	if c.HTTPTimeout != 60.0 {
 		t.Errorf("Expected HTTPTimeout 60.0, got %f", c.HTTPTimeout)
 	}
@@ -70,7 +61,6 @@ func TestConfigEnvOverride(t *testing.T) {
 	// Cleanup
 	os.Unsetenv("APP_NAME")
 	os.Unsetenv("PORT")
-	os.Unsetenv("DEBUG")
 	os.Unsetenv("HTTP_TIMEOUT")
 	cfg = nil
 }

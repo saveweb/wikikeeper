@@ -11,7 +11,6 @@ import (
 type Config struct {
 	AppName    string
 	AppVersion string
-	Debug      bool
 	Host       string
 	Port       int
 
@@ -61,7 +60,6 @@ func Load() *Config {
 	cfg = &Config{
 		AppName:                getEnv("APP_NAME", "WikiKeeper"),
 		AppVersion:             getEnv("APP_VERSION", "0.2.0"),
-		Debug:                  getEnvBool("DEBUG", false),
 		Host:                   getEnv("HOST", "0.0.0.0"),
 		Port:                   getEnvInt("PORT", 8000),
 		DBHost:                 getEnv("DB_HOST", "localhost"),
