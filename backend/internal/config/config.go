@@ -9,35 +9,35 @@ import (
 
 // Config holds application configuration
 type Config struct {
-	AppName         string
-	AppVersion      string
-	Debug           bool
-	Host            string
-	Port            int
+	AppName    string
+	AppVersion string
+	Debug      bool
+	Host       string
+	Port       int
 
 	// Database (PostgreSQL)
-	DBHost          string
-	DBPort          string
-	DBUser          string
-	DBPassword      string
-	DBName          string
+	DBHost     string
+	DBPort     string
+	DBUser     string
+	DBPassword string
+	DBName     string
 
 	// MongoDB (for migration read-only)
-	MongoDBURI      string
-	MongoDBDBName   string
+	MongoDBURI    string
+	MongoDBDBName string
 
 	// HTTP Client
-	HTTPTimeout     float64
-	HTTPUserAgent   string
+	HTTPTimeout   float64
+	HTTPUserAgent string
 
 	// Collection settings
-	CollectInterval   float64 // Minutes between collection cycles
-	CollectDelay      float64 // Seconds between wiki collections
-	CollectBatchSize  int     // Number of wikis to process per cycle
+	CollectInterval  float64 // Minutes between collection cycles
+	CollectDelay     float64 // Seconds between wiki collections
+	CollectBatchSize int     // Number of wikis to process per cycle
 
 	// Archive.org check settings
-	ArchiveCheckInterval float64 // Minutes between archive check cycles
-	ArchiveCheckDelay    float64 // Seconds between archive checks
+	ArchiveCheckInterval  float64 // Minutes between archive check cycles
+	ArchiveCheckDelay     float64 // Seconds between archive checks
 	ArchiveCheckBatchSize int     // Number of wikis to check per cycle
 
 	// Authentication
@@ -63,29 +63,29 @@ func Load() *Config {
 	godotenv.Load()
 
 	cfg = &Config{
-		AppName:         getEnv("APP_NAME", "WikiKeeper"),
-		AppVersion:      getEnv("APP_VERSION", "0.2.0"),
-		Debug:           getEnvBool("DEBUG", false),
-		Host:            getEnv("HOST", "0.0.0.0"),
-		Port:            getEnvInt("PORT", 8000),
-		DBHost:          getEnv("DB_HOST", "localhost"),
-		DBPort:          getEnv("DB_PORT", "5432"),
-		DBUser:          getEnv("DB_USER", "wikikeeper"),
-		DBPassword:      getEnv("DB_PASSWORD", "wikikeeper123"),
-		DBName:          getEnv("DB_NAME", "wikikeeper"),
-		MongoDBURI:      getEnv("MONGODB_URI", "mongodb://localhost:27017"),
-		MongoDBDBName:   getEnv("MONGODB_DB_NAME", "wikikeeper"),
-		HTTPTimeout:     getEnvFloat("HTTP_TIMEOUT", 30.0),
-		HTTPUserAgent:   getEnv("HTTP_USER_AGENT", "WikiKeeper/0.2.0 (https://wikikeeper.saveweb.org/)"),
-		CollectInterval: getEnvFloat("COLLECT_INTERVAL", 60.0), // 60 minutes = 1 hour
-		CollectDelay:    getEnvFloat("COLLECT_DELAY", 1.5),
-		CollectBatchSize: getEnvInt("COLLECT_BATCH_SIZE", 50),
-		ArchiveCheckInterval: getEnvFloat("ARCHIVE_CHECK_INTERVAL", 720.0), // 720 minutes = 12 hours
-		ArchiveCheckDelay:    getEnvFloat("ARCHIVE_CHECK_DELAY", 1.0), // 1 second between checks
-		ArchiveCheckBatchSize: getEnvInt("ARCHIVE_CHECK_BATCH_SIZE", 100), // Check 100 wikis per cycle
-		AdminToken:      getEnv("ADMIN_TOKEN", ""), // Empty means no admin protection
-		AllowOrigins:    getEnvStringSlice("ALLOW_ORIGINS", []string{"http://localhost:5173", "http://localhost:3000", "http://localhost:8000"}),
-		LogLevel:        getEnv("LOG_LEVEL", "INFO"),
+		AppName:               getEnv("APP_NAME", "WikiKeeper"),
+		AppVersion:            getEnv("APP_VERSION", "0.2.0"),
+		Debug:                 getEnvBool("DEBUG", false),
+		Host:                  getEnv("HOST", "0.0.0.0"),
+		Port:                  getEnvInt("PORT", 8000),
+		DBHost:                getEnv("DB_HOST", "localhost"),
+		DBPort:                getEnv("DB_PORT", "5432"),
+		DBUser:                getEnv("DB_USER", "wikikeeper"),
+		DBPassword:            getEnv("DB_PASSWORD", "wikikeeper123"),
+		DBName:                getEnv("DB_NAME", "wikikeeper"),
+		MongoDBURI:            getEnv("MONGODB_URI", "mongodb://localhost:27017"),
+		MongoDBDBName:         getEnv("MONGODB_DB_NAME", "wikikeeper"),
+		HTTPTimeout:           getEnvFloat("HTTP_TIMEOUT", 30.0),
+		HTTPUserAgent:         getEnv("HTTP_USER_AGENT", "WikiKeeper/0.3.0 (https://wikikeeper.saveweb.org/)"),
+		CollectInterval:       getEnvFloat("COLLECT_INTERVAL", 60.0), // 60 minutes = 1 hour
+		CollectDelay:          getEnvFloat("COLLECT_DELAY", 1.5),
+		CollectBatchSize:      getEnvInt("COLLECT_BATCH_SIZE", 50),
+		ArchiveCheckInterval:  getEnvFloat("ARCHIVE_CHECK_INTERVAL", 720.0), // 720 minutes = 12 hours
+		ArchiveCheckDelay:     getEnvFloat("ARCHIVE_CHECK_DELAY", 1.0),      // 1 second between checks
+		ArchiveCheckBatchSize: getEnvInt("ARCHIVE_CHECK_BATCH_SIZE", 100),   // Check 100 wikis per cycle
+		AdminToken:            getEnv("ADMIN_TOKEN", ""),                    // Empty means no admin protection
+		AllowOrigins:          getEnvStringSlice("ALLOW_ORIGINS", []string{"http://localhost:5173", "http://localhost:3000", "http://localhost:8000"}),
+		LogLevel:              getEnv("LOG_LEVEL", "INFO"),
 	}
 
 	return cfg
