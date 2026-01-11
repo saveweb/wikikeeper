@@ -188,13 +188,10 @@ func (s *SiteInfoScheduler) periodicRun(ctx context.Context) {
 				backoffThreshold := 3 * 24 * time.Hour // 3 days
 
 				if timeSinceLastCheck < backoffThreshold {
-					backoffTime := time.Hour
 					siteinfoSchedulerLog.Info("backing off, recent update detected",
 						"last_check", wikis[0].LastCheckAt,
-						"since", timeSinceLastCheck,
-						"backoff", backoffTime)
-
-					ticker.Reset(backoffTime)
+						"since", timeSinceLastCheck)
+					ticker.Reset(time.Minute)
 					continue
 				}
 			}
