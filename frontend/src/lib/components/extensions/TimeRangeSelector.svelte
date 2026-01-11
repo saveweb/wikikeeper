@@ -1,13 +1,12 @@
 <script lang="ts">
-	export let onTimeRangeChange: (from: string, to: string) => void;
+	export let onTimeRangeChange: (from: string, to: string, label: string) => void;
 
-	type RangeOption = '7d' | '30d' | '90d';
-	let selectedRange: RangeOption = '30d';
+	type RangeOption = '1y' | '10y';
+	let selectedRange: RangeOption | null = null;
 
 	const ranges: { value: RangeOption; label: string }[] = [
-		{ value: '7d', label: 'Last 7 days' },
-		{ value: '30d', label: 'Last 30 days' },
-		{ value: '90d', label: 'Last 90 days' }
+		{ value: '1y', label: 'Last 1 Year' },
+		{ value: '10y', label: 'Last 10 Years' }
 	];
 
 	function handleRangeChange(range: RangeOption) {
@@ -18,35 +17,37 @@
 		const to = now;
 
 		switch (range) {
-			case '7d':
-				from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+			case '1y':
+				from = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
 				break;
-			case '30d':
-				from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-				break;
-			case '90d':
-				from = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+			case '10y':
+				from = new Date(now.getTime() - 10 * 365 * 24 * 60 * 60 * 1000);
 				break;
 		}
 
-		onTimeRangeChange(from.toISOString(), to.toISOString());
+		onTimeRangeChange(from.toISOString(), to.toISOString(), ranges.find(r => r.value === range)!.label);
 	}
 </script>
 
-<div class="flex items-center gap-2 mb-4">
-	<span class="text-sm text-gray-700">Time Range:</span>
-	<div class="flex gap-2">
-		{#each ranges as range}
-			<button
-				onclick={() => handleRangeChange(range.value)}
-				class="px-3 py-1 text-sm rounded-md {
-					selectedRange === range.value
-						? 'bg-primary-600 text-white'
-						: 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-				}"
-			>
-				{range.label}
-			</button>
-		{/each}
+<div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+	<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+		<div>
+			<h3 class="text-sm font-semibold text-gray-900">View Historical Extensions</h3>
+			<p class="text-xs text-gray-600 mt-1">Select a time range to browse and view past extension snapshots</p>
+		</div>
+		<div class="flex gap-2">
+			{#each ranges as range}
+				<button
+					onclick={() => handleRangeChange(range.value)}
+					class="px-4 py-2 text-sm font-medium rounded-lg transition-colors {
+						selectedRange === range.value
+							? 'bg-primary-600 text-white shadow-sm'
+							: 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+					}"
+				>
+					{range.label}
+				</button>
+			{/each}
+		</div>
 	</div>
 </div>

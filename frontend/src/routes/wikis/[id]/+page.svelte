@@ -25,7 +25,6 @@
 	let checkingStats = $state(false);
 	let checkingArchive = $state(false);
 	let deleting = $state(false);
-	let showDeleteConfirm = $state(false);
 	let chartHeight = 400;
 
 	// Calculate max archive size for progress bar comparison
@@ -472,7 +471,7 @@
 						</div>
 					{/if}
 
-					<ExtensionsList items={currentExtensions.items} title="Current Extensions & Skins" mediawikiVersion={currentExtensions.mediawiki_version} />
+					<ExtensionsList items={currentExtensions.items} title="Extensions & Skins [{formatShortDate(currentExtensions.snapshot_at)} -> {currentExtensions.valid_until ? formatShortDate(currentExtensions.valid_until) : 'So far'}]" mediawikiVersion={currentExtensions.mediawiki_version} />
 				{:else}
 					<p class="text-sm text-gray-500">No extensions data available yet. Trigger a stats check to collect extensions.</p>
 				{/if}
