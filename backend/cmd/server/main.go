@@ -127,6 +127,9 @@ func main() {
 	api.GET("/wikis/:id/thumbnail", wikiHandler.GetThumbnail)
 	api.GET("/wikis/:id/extensions", extensionsHandler.GetLatestExtensions)
 	api.GET("/wikis/:id/extensions/history", extensionsHandler.GetExtensionsHistory)
+	api.GET("/extensions", extensionsHandler.GetAllExtensionsStats)
+	api.GET("/extensions/:name/wikis", extensionsHandler.GetExtensionWikis)
+	api.GET("/extensions/:name/versions", extensionsHandler.GetExtensionVersions)
 
 	// Wiki routes - public POST with rate limiting
 	api.POST("/wikis", wikiHandler.Create)

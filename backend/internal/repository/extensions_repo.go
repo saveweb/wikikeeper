@@ -91,3 +91,168 @@ func (r *ExtensionsRepository) GetAllSnapshots(ctx context.Context, wikiID uuid.
 	}
 	return snapshots, nil
 }
+
+// ExtensionWikiInfo contains wiki and extension information
+type ExtensionWikiInfo struct {
+	WikiID           uuid.UUID  `json:"wiki_id"`
+	WikiName         *string    `json:"wiki_name,omitempty"`
+	Sitename         *string    `json:"sitename,omitempty"`
+	URL              string     `json:"url"`
+	SnapshotAt       time.Time  `json:"snapshot_at"`
+	ExtensionVersion *string    `json:"version,omitempty"`
+}
+
+// ExtensionWikisListOptions pagination options for listing wikis
+type ExtensionWikisListOptions struct {
+	Page  int
+	Limit int
+}
+
+// GetWikisUsingExtension gets wikis that are using a specific extension (paginated)
+func (r *ExtensionsRepository) GetWikisUsingExtension(
+	ctx context.Context,
+	extensionName string,
+	opts ExtensionWikisListOptions,
+) ([]*ExtensionWikiInfo, int64, error) {
+	var result []*ExtensionWikiInfo
+	var total int64
+
+	// Set defaults
+	if opts.Page < 1 {
+		opts.Page = 1
+	}
+	if opts.Limit < 1 || opts.Limit > 100 {
+		opts.Limit = 20
+	}
+
+	// Count total
+	baseQuery := r.db.WithContext(ctx).
+		Table("wiki_extension_items wei").
+		Joins("JOIN wiki_extensions_snapshots wes ON wei.snapshot_id = wes.id").
+		Joins("JOIN wikis w ON wes.wiki_id = w.id").
+		Where("wei.name = ? AND wes.valid_until IS NULL", extensionName)
+
+	if err := baseQuery.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Get paginated data
+	offset := (opts.Page - 1) * opts.Limit
+	err := baseQuery.
+		Select(`
+			w.id as wiki_id,
+			w.wiki_name,
+			w.sitename,
+			w.url,
+			wes.snapshot_at,
+			wei.version as extension_version
+		`).
+		Offset(offset).
+		Limit(opts.Limit).
+		Order("w.sitename ASC NULLS LAST, w.url ASC").
+		Scan(&result).Error
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return result, total, nil
+}
+
+// ExtensionVersionStats represents version distribution statistics
+type ExtensionVersionStats struct {
+	Version string `json:"version"`
+	Count   int64  `json:"count"`
+}
+
+// GetExtensionVersionDistribution gets the version distribution for an extension
+func (r *ExtensionsRepository) GetExtensionVersionDistribution(
+	ctx context.Context,
+	extensionName string,
+) ([]*ExtensionVersionStats, int64, error) {
+	var stats []*ExtensionVersionStats
+
+	// Use COALESCE to convert NULL to empty string
+	query := `
+		SELECT
+			COALESCE(wei.version, '') as version,
+			COUNT(*) as count
+		FROM wiki_extension_items wei
+		JOIN wiki_extensions_snapshots wes ON wei.snapshot_id = wes.id
+		WHERE wei.name = ? AND wes.valid_until IS NULL
+		GROUP BY COALESCE(wei.version, '')
+		ORDER BY count DESC
+	`
+
+	err := r.db.WithContext(ctx).Raw(query, extensionName).Scan(&stats).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Calculate total
+	var total int64
+	for _, stat := range stats {
+		total += stat.Count
+	}
+
+	return stats, total, nil
+}
+
+// ExtensionStats represents extension usage statistics
+type ExtensionStats struct {
+	Name  string `json:"name"`
+	Count int64  `json:"count"`
+}
+
+// GetAllExtensionsStatsOptions pagination options for GetAllExtensionsStats
+type GetAllExtensionsStatsOptions struct {
+	Page  int
+	Limit int
+}
+
+// GetAllExtensionsStats gets statistics for all extensions (paginated)
+func (r *ExtensionsRepository) GetAllExtensionsStats(ctx context.Context, opts GetAllExtensionsStatsOptions) ([]*ExtensionStats, int64, error) {
+	var stats []*ExtensionStats
+	var total int64
+
+	// Set defaults
+	if opts.Page < 1 {
+		opts.Page = 1
+	}
+	if opts.Limit < 1 || opts.Limit > 500 {
+		opts.Limit = 50
+	}
+
+	// Count total
+	countQuery := `
+		SELECT COUNT(DISTINCT wei.name)
+		FROM wiki_extension_items wei
+		JOIN wiki_extensions_snapshots wes ON wei.snapshot_id = wes.id
+		WHERE wes.valid_until IS NULL
+	`
+	err := r.db.WithContext(ctx).Raw(countQuery).Scan(&total).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Get paginated data
+	query := `
+		SELECT
+			wei.name,
+			COUNT(*) as count
+		FROM wiki_extension_items wei
+		JOIN wiki_extensions_snapshots wes ON wei.snapshot_id = wes.id
+		WHERE wes.valid_until IS NULL
+		GROUP BY wei.name
+		ORDER BY count DESC, wei.name ASC
+		LIMIT ? OFFSET ?
+	`
+
+	offset := (opts.Page - 1) * opts.Limit
+	err = r.db.WithContext(ctx).Raw(query, opts.Limit, offset).Scan(&stats).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return stats, total, nil
+}

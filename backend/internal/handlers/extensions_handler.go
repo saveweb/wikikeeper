@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -124,5 +125,137 @@ func (h *ExtensionsHandler) GetExtensionsHistory(c echo.Context) error {
 		"from":      from.Format(time.RFC3339),
 		"to":        to.Format(time.RFC3339),
 		"snapshots": snapshots,
+	})
+}
+
+// GetExtensionWikisRequest query parameters for GetExtensionWikis
+type GetExtensionWikisRequest struct {
+	Page  int `query:"page"`
+	Limit int `query:"limit"`
+}
+
+// GetExtensionWikis handles GET /api/extensions/:name/wikis
+func (h *ExtensionsHandler) GetExtensionWikis(c echo.Context) error {
+	extensionName := c.Param("name")
+	if extensionName == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"detail": "Extension name is required",
+		})
+	}
+
+	var req GetExtensionWikisRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"detail": "Invalid query parameters",
+		})
+	}
+
+	// Set defaults
+	if req.Page < 1 {
+		req.Page = 1
+	}
+	if req.Limit < 1 || req.Limit > 100 {
+		req.Limit = 20
+	}
+
+	extensionsRepo := repository.NewExtensionsRepository(h.db)
+	ctx := c.Request().Context()
+
+	wikis, total, err := extensionsRepo.GetWikisUsingExtension(
+		ctx,
+		extensionName,
+		repository.ExtensionWikisListOptions{
+			Page:  req.Page,
+			Limit: req.Limit,
+		},
+	)
+
+	if err != nil {
+		extensionsLog.Info("Failed to get extension wikis", "err", err, "extension", extensionName)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"detail": "Failed to get extension wikis",
+		})
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"extension_name": extensionName,
+		"total":          total,
+		"page":           req.Page,
+		"limit":          req.Limit,
+		"data":           wikis,
+	})
+}
+
+// GetExtensionVersions handles GET /api/extensions/:name/versions
+func (h *ExtensionsHandler) GetExtensionVersions(c echo.Context) error {
+	extensionName := c.Param("name")
+	if extensionName == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"detail": "Extension name is required",
+		})
+	}
+
+	extensionsRepo := repository.NewExtensionsRepository(h.db)
+	ctx := c.Request().Context()
+
+	stats, total, err := extensionsRepo.GetExtensionVersionDistribution(ctx, extensionName)
+	if err != nil {
+		extensionsLog.Info("Failed to get extension versions", "err", err, "extension", extensionName)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"detail": "Failed to get extension version distribution",
+		})
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"extension_name": extensionName,
+		"total_wikis":    total,
+		"versions":       stats,
+	})
+}
+
+// GetAllExtensionsStats handles GET /api/extensions
+func (h *ExtensionsHandler) GetAllExtensionsStats(c echo.Context) error {
+	// Parse pagination parameters
+	page := c.QueryParam("page")
+	limit := c.QueryParam("limit")
+
+	pageInt := 1
+	limitInt := 50
+
+	if page != "" {
+		if p, err := strconv.Atoi(page); err == nil && p > 0 {
+			pageInt = p
+		}
+	}
+
+	if limit != "" {
+		if l, err := strconv.Atoi(limit); err == nil && l > 0 && l <= 500 {
+			limitInt = l
+		}
+	}
+
+	extensionsRepo := repository.NewExtensionsRepository(h.db)
+	ctx := c.Request().Context()
+
+	stats, total, err := extensionsRepo.GetAllExtensionsStats(
+		ctx,
+		repository.GetAllExtensionsStatsOptions{
+			Page:  pageInt,
+			Limit: limitInt,
+		},
+	)
+	if err != nil {
+		extensionsLog.Info("Failed to get extensions stats", "err", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"detail": "Failed to get extensions statistics",
+		})
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"extensions": stats,
+		"total":      total,
+		"page":       pageInt,
+		"limit":      limitInt,
+		"pages":      (total + int64(limitInt) - 1) / int64(limitInt),
 	})
 }

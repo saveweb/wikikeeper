@@ -24,3 +24,44 @@ export interface ExtensionsHistoryResponse {
 	to: string;
 	snapshots: WikiExtensionsSnapshot[];
 }
+
+export interface ExtensionWikiInfo {
+	wiki_id: string;
+	wiki_name: string | null;
+	sitename: string | null;
+	url: string;
+	snapshot_at: string;
+	version: string | null;
+}
+
+export interface ExtensionWikisResponse {
+	extension_name: string;
+	total: number;
+	page: number;
+	limit: number;
+	data: ExtensionWikiInfo[];
+}
+
+export interface ExtensionVersionStats {
+	version: string;
+	count: number;
+}
+
+export interface ExtensionVersionsResponse {
+	extension_name: string;
+	total_wikis: number;
+	versions: ExtensionVersionStats[];
+}
+
+export interface ExtensionStats {
+	name: string;
+	count: number;
+}
+
+export interface ExtensionsListResponse {
+	extensions: ExtensionStats[];
+	total: number;
+	page: number;
+	limit: number;
+	pages: number;
+}

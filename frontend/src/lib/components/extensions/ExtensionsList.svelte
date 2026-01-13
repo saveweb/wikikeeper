@@ -6,6 +6,10 @@
 	// Group by type
 	const extensions = $derived(items.filter((item) => item.ext_type === 'skin'));
 	const others = $derived(items.filter((item) => item.ext_type !== 'skin'));
+
+	function getExtensionDetailUrl(name: string) {
+		return `/extensions/${encodeURIComponent(name)}`;
+	}
 </script>
 
 <div class="bg-white shadow rounded-lg">
@@ -24,18 +28,26 @@
 					{#each others as ext (ext.ext_type + ':' + ext.name)}
 						<div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
 							<div>
-								{#if ext.url}
+								<div class="flex items-start justify-between gap-2">
+									{#if ext.url}
+										<a
+											href={ext.url}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline"
+										>
+											{ext.name} ↗
+										</a>
+									{:else}
+										<h4 class="text-sm font-medium text-gray-900">{ext.name}</h4>
+									{/if}
 									<a
-										href={ext.url}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline"
+										href={getExtensionDetailUrl(ext.name)}
+										class="text-xs text-primary-600 hover:text-primary-700 hover:underline flex-shrink-0"
 									>
-										{ext.name} ↗
+										Details →
 									</a>
-								{:else}
-									<h4 class="text-sm font-medium text-gray-900">{ext.name}</h4>
-								{/if}
+								</div>
 								{#if ext.version}
 									<p class="text-xs text-gray-500 mt-1">Version: {ext.version}</p>
 								{/if}
@@ -56,18 +68,26 @@
 					{#each extensions as skin (skin.ext_type + ':' + skin.name)}
 						<div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
 							<div>
-								{#if skin.url}
+								<div class="flex items-start justify-between gap-2">
+									{#if skin.url}
+										<a
+											href={skin.url}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline"
+										>
+											{skin.name} ↗
+										</a>
+									{:else}
+										<h4 class="text-sm font-medium text-gray-900">{skin.name}</h4>
+									{/if}
 									<a
-										href={skin.url}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline"
+										href={getExtensionDetailUrl(skin.name)}
+										class="text-xs text-primary-600 hover:text-primary-700 hover:underline flex-shrink-0"
 									>
-										{skin.name} ↗
+										Details →
 									</a>
-								{:else}
-									<h4 class="text-sm font-medium text-gray-900">{skin.name}</h4>
-								{/if}
+								</div>
 								{#if skin.version}
 									<p class="text-xs text-gray-500 mt-1">Version: {skin.version}</p>
 								{/if}

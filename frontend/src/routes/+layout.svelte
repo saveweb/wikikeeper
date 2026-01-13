@@ -71,6 +71,12 @@
 						>
 							Wikis
 						</a>
+						<a
+							href="/extensions"
+							class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+						>
+							Extensions
+						</a>
 					</div>
 				</div>
 				<div class="flex items-center">
