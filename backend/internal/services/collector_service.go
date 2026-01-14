@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -208,7 +209,8 @@ func (s *CollectorService) UpdateWikiStatus(ctx context.Context, wikiID uuid.UUI
 
 	if err != nil && status == models.WikiStatusError {
 		errMsg := err.Error()
-		wiki.LastError = &errMsg
+		errMsgUTF8Safe := strings.ToValidUTF8(errMsg, `\uFFFD`)
+		wiki.LastError = &errMsgUTF8Safe
 		wiki.LastErrorAt = &now
 		wiki.APIAvailable = false
 	}
