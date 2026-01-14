@@ -211,6 +211,7 @@ type GetAllExtensionsStatsOptions struct {
 }
 
 // GetAllExtensionsStats gets statistics for all extensions (paginated)
+// Uses materialized view for performance
 func (r *ExtensionsRepository) GetAllExtensionsStats(ctx context.Context, opts GetAllExtensionsStatsOptions) ([]*ExtensionStats, int64, error) {
 	var stats []*ExtensionStats
 	var total int64
@@ -223,36 +224,30 @@ func (r *ExtensionsRepository) GetAllExtensionsStats(ctx context.Context, opts G
 		opts.Limit = 50
 	}
 
-	// Count total
-	countQuery := `
-		SELECT COUNT(DISTINCT wei.name)
-		FROM wiki_extension_items wei
-		JOIN wiki_extensions_snapshots wes ON wei.snapshot_id = wes.id
-		WHERE wes.valid_until IS NULL
-	`
-	err := r.db.WithContext(ctx).Raw(countQuery).Scan(&total).Error
+	// Get total count from materialized view
+	err := r.db.WithContext(ctx).Raw("SELECT COUNT(*) FROM mv_extension_stats").Scan(&total).Error
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// Get paginated data
+	// Get paginated data from materialized view
+	offset := (opts.Page - 1) * opts.Limit
 	query := `
-		SELECT
-			wei.name,
-			COUNT(*) as count
-		FROM wiki_extension_items wei
-		JOIN wiki_extensions_snapshots wes ON wei.snapshot_id = wes.id
-		WHERE wes.valid_until IS NULL
-		GROUP BY wei.name
-		ORDER BY count DESC, wei.name ASC
+		SELECT name, count
+		FROM mv_extension_stats
+		ORDER BY count DESC, name ASC
 		LIMIT ? OFFSET ?
 	`
-
-	offset := (opts.Page - 1) * opts.Limit
 	err = r.db.WithContext(ctx).Raw(query, opts.Limit, offset).Scan(&stats).Error
 	if err != nil {
 		return nil, 0, err
 	}
 
 	return stats, total, nil
+}
+
+// RefreshExtensionStatsMaterializedView refreshes the extension stats materialized view
+// This should be called after extension snapshots are updated
+func (r *ExtensionsRepository) RefreshExtensionStatsMaterializedView(ctx context.Context) error {
+	return r.db.WithContext(ctx).Exec("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_extension_stats").Error
 }

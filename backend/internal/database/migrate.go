@@ -42,6 +42,10 @@ var migrations = []Migration{
 		Version: 5,
 		Name:    "optimize_extensions_performance",
 	},
+	{
+		Version: 6,
+		Name:    "create_extensions_stats_materialized_view",
+	},
 }
 
 // RunMigrations executes all pending migrations
