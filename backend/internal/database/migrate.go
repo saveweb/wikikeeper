@@ -38,6 +38,10 @@ var migrations = []Migration{
 		Version: 4,
 		Name:    "remove_redundant_fields",
 	},
+	{
+		Version: 5,
+		Name:    "optimize_extensions_performance",
+	},
 }
 
 // RunMigrations executes all pending migrations
