@@ -56,8 +56,36 @@ func (s *SiteInfoScheduler) Start(ctx context.Context) {
 	siteinfoSchedulerLog.Info("siteinfo scheduler started")
 
 	// Start periodic collection
-	s.wg.Add(1)
+	s.wg.Add(2)
 	go s.periodicRun(ctx)
+	go s.refreshExtensionStatsMaterializedView(ctx)
+}
+
+func (s *SiteInfoScheduler) refreshExtensionStatsMaterializedView(ctx context.Context) {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(30 * time.Minute)
+	extensionsRepo := repository.NewExtensionsRepository(s.db)
+
+	for {
+		select {
+		case <-s.stopCh:
+			siteinfoSchedulerLog.Info("exiting extension stats materialized view refresher")
+			return
+		case <-ctx.Done():
+			siteinfoSchedulerLog.Info("context cancelled, exiting extension stats materialized view refresher")
+			return
+		case <-ticker.C:
+			siteinfoSchedulerLog.Info("refreshing extension stats materialized view")
+			// Refresh materialized view to reflect new snapshots
+
+			start := time.Now()
+			if err := extensionsRepo.RefreshExtensionStatsMaterializedView(ctx); err != nil {
+				siteinfoSchedulerLog.Info("Failed to refresh extension stats materialized view", "err", err)
+			}
+			siteinfoSchedulerLog.Info("refreshed extension stats materialized view", "duration", time.Since(start))
+		}
+	}
 }
 
 // Stop gracefully stops the scheduler

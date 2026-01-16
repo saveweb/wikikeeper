@@ -184,11 +184,6 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 				"added", len(diff.Added),
 				"removed", len(diff.Removed),
 				"modified", len(diff.Modified))
-			
-			// Refresh materialized view to reflect new snapshot
-			if err := extensionsRepo.RefreshExtensionStatsMaterializedView(ctx); err != nil {
-				collectorLog.Info("Failed to refresh extension stats materialized view", "err", err)
-			}
 		}
 	}
 	// If no changes, we don't need to update anything (snapshot remains valid)
