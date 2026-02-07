@@ -16,7 +16,10 @@
 			{ name: 'Total Wikis', value: s?.total_wikis || 0, color: 'bg-blue-500' },
 			{ name: 'OK', value: s?.status_ok_wikis || 0, color: 'bg-green-500' },
 			{ name: 'Errors', value: s?.status_error_wikis || 0, color: 'bg-red-500' },
-			{ name: 'Archived', value: s?.archived_wikis || 0, color: 'bg-purple-500' }
+			{ name: 'Archived', value: s?.archived_wikis || 0, color: 'bg-purple-500' },
+			// { name: 'Active', value: s?.active_wikis || 0, color: 'bg-yellow-500' },
+			{ name: 'Total Pages', value: s?.total_pages || 0, color: 'bg-indigo-500' },
+			{ name: 'Total Edits', value: s?.total_edits || 0, color: 'bg-pink-500' }
 		];
 	});
 

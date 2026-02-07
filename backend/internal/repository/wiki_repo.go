@@ -163,71 +163,45 @@ func (r *WikiRepository) GetSummaryStats(ctx context.Context) (map[string]int64,
 	var result struct {
 		TotalWikis      int64
 		ArchivedWikis   int64
-		StatusOKWikis   int64 // status='ok' (successfully collected)
-		StatusErrorWikis int64 // status='error' (collection failed)
-		ActiveWikis     int64 // is_active=true (participating in collection)
+		StatusOKWikis   int64
+		StatusErrorWikis int64
+		ActiveWikis     int64
 		TotalPages      int64
 		TotalEdits      int64
 	}
 
-	// Count total wikis
-	if err := r.db.WithContext(ctx).Model(&models.Wiki{}).Count(&result.TotalWikis).Error; err != nil {
-		return nil, err
-	}
+	// Single query to get all wiki statistics using CASE statements
+	query := `
+		SELECT 
+			COUNT(*) as total_wikis,
+			COUNT(*) FILTER (WHERE has_archive = true) as archived_wikis,
+			COUNT(*) FILTER (WHERE status = 'ok') as status_ok_wikis,
+			COUNT(*) FILTER (WHERE status = 'error') as status_error_wikis,
+			COUNT(*) FILTER (WHERE is_active = true) as active_wikis,
+			COALESCE(SUM(pages), 0) as total_pages,
+			COALESCE(SUM(edits), 0) as total_edits
+		FROM (
+			SELECT 
+				w.has_archive,
+				w.status,
+				w.is_active,
+				ws.pages,
+				ws.edits
+			FROM wikis w
+			LEFT JOIN LATERAL (
+				SELECT pages, edits
+				FROM wiki_stats
+				WHERE wiki_id = w.id
+				ORDER BY time DESC
+				LIMIT 1
+			) ws ON true
+		) subquery
+	`
 
-	// Count archived wikis
-	if err := r.db.WithContext(ctx).Model(&models.Wiki{}).Where("has_archive = ?", true).Count(&result.ArchivedWikis).Error; err != nil {
+	err := r.db.WithContext(ctx).Raw(query).Scan(&result).Error
+	if err != nil {
 		return nil, err
 	}
-
-	// Count wikis by status
-	if err := r.db.WithContext(ctx).Model(&models.Wiki{}).Where("status = ?", models.WikiStatusOK).Count(&result.StatusOKWikis).Error; err != nil {
-		return nil, err
-	}
-	if err := r.db.WithContext(ctx).Model(&models.Wiki{}).Where("status = ?", models.WikiStatusError).Count(&result.StatusErrorWikis).Error; err != nil {
-		return nil, err
-	}
-
-	// Count active wikis (is_active = true)
-	if err := r.db.WithContext(ctx).Model(&models.Wiki{}).Where("is_active = ?", true).Count(&result.ActiveWikis).Error; err != nil {
-		return nil, err
-	}
-
-	// Sum pages from latest stats
-	type PageSum struct {
-		TotalPages int64
-	}
-	var pageSum PageSum
-	if err := r.db.WithContext(ctx).Raw(`
-		SELECT COALESCE(SUM(pages), 0) as total_pages
-		FROM wiki_stats ws1
-		WHERE ws1.time = (
-			SELECT MAX(time)
-			FROM wiki_stats ws2
-			WHERE ws2.wiki_id = ws1.wiki_id
-		)
-	`).Scan(&pageSum).Error; err != nil {
-		return nil, err
-	}
-	result.TotalPages = pageSum.TotalPages
-
-	// Sum edits from latest stats
-	type EditSum struct {
-		TotalEdits int64
-	}
-	var editSum EditSum
-	if err := r.db.WithContext(ctx).Raw(`
-		SELECT COALESCE(SUM(edits), 0) as total_edits
-		FROM wiki_stats ws1
-		WHERE ws1.time = (
-			SELECT MAX(time)
-			FROM wiki_stats ws2
-			WHERE ws2.wiki_id = ws1.wiki_id
-		)
-	`).Scan(&editSum).Error; err != nil {
-		return nil, err
-	}
-	result.TotalEdits = editSum.TotalEdits
 
 	return map[string]int64{
 		"total_wikis":       result.TotalWikis,
