@@ -3,10 +3,13 @@ package repository
 import (
 	"context"
 	"strings"
+	"time"
+
+	"wikikeeper-backend/internal/models"
 
 	"github.com/google/uuid"
+	"github.com/jellydator/ttlcache/v3"
 	"gorm.io/gorm"
-	"wikikeeper-backend/internal/models"
 )
 
 // WikiRepository handles wiki database operations
@@ -56,12 +59,12 @@ func (r *WikiRepository) GetByAPIURL(ctx context.Context, apiURL string) (*model
 
 // List retrieves wikis with pagination and filtering
 type ListOptions struct {
-	Page      int
-	PageSize  int
-	Status    *models.WikiStatus
+	Page       int
+	PageSize   int
+	Status     *models.WikiStatus
 	HasArchive *bool
-	Search    string // Search in sitename
-	OrderBy   string // e.g., "updated_at DESC"
+	Search     string // Search in sitename
+	OrderBy    string // e.g., "updated_at DESC"
 }
 
 func (r *WikiRepository) List(ctx context.Context, opts ListOptions) ([]*models.Wiki, int64, error) {
@@ -158,21 +161,47 @@ func (r *WikiRepository) ExistsByAPIURL(ctx context.Context, apiURL string) (boo
 	return count > 0, err
 }
 
+type Summary struct {
+	TotalWikis       int64
+	ArchivedWikis    int64
+	StatusOKWikis    int64
+	StatusErrorWikis int64
+	ActiveWikis      int64
+	TotalPages       int64
+	TotalEdits       int64
+}
+
+var summaryCache = ttlcache.New(
+	ttlcache.WithTTL[bool, *Summary](10*time.Second),
+	ttlcache.WithDisableTouchOnHit[bool, *Summary](),
+)
+
+func init() {
+	go summaryCache.Start()
+}
+
 // GetSummaryStats returns summary statistics
-func (r *WikiRepository) GetSummaryStats(ctx context.Context) (map[string]int64, error) {
-	var result struct {
-		TotalWikis      int64
-		ArchivedWikis   int64
-		StatusOKWikis   int64
-		StatusErrorWikis int64
-		ActiveWikis     int64
-		TotalPages      int64
-		TotalEdits      int64
+func (r *WikiRepository) GetSummaryStats(ctx context.Context, bypassCache bool) (map[string]int64, error) {
+	var result Summary
+
+	if !bypassCache {
+		if c := summaryCache.Get(true); c != nil {
+			cached := c.Value()
+			return map[string]int64{
+				"total_wikis":        cached.TotalWikis,
+				"archived_wikis":     cached.ArchivedWikis,
+				"status_ok_wikis":    cached.StatusOKWikis,
+				"status_error_wikis": cached.StatusErrorWikis,
+				"active_wikis":       cached.ActiveWikis,
+				"total_pages":        cached.TotalPages,
+				"total_edits":        cached.TotalEdits,
+			}, nil
+		}
 	}
 
 	// Single query to get all wiki statistics using CASE statements
 	query := `
-		SELECT 
+		SELECT
 			COUNT(*) as total_wikis,
 			COUNT(*) FILTER (WHERE has_archive = true) as archived_wikis,
 			COUNT(*) FILTER (WHERE status = 'ok') as status_ok_wikis,
@@ -181,7 +210,7 @@ func (r *WikiRepository) GetSummaryStats(ctx context.Context) (map[string]int64,
 			COALESCE(SUM(pages), 0) as total_pages,
 			COALESCE(SUM(edits), 0) as total_edits
 		FROM (
-			SELECT 
+			SELECT
 				w.has_archive,
 				w.status,
 				w.is_active,
@@ -204,12 +233,12 @@ func (r *WikiRepository) GetSummaryStats(ctx context.Context) (map[string]int64,
 	}
 
 	return map[string]int64{
-		"total_wikis":       result.TotalWikis,
-		"archived_wikis":    result.ArchivedWikis,
-		"status_ok_wikis":   result.StatusOKWikis,
+		"total_wikis":        result.TotalWikis,
+		"archived_wikis":     result.ArchivedWikis,
+		"status_ok_wikis":    result.StatusOKWikis,
 		"status_error_wikis": result.StatusErrorWikis,
-		"active_wikis":      result.ActiveWikis,
-		"total_pages":       result.TotalPages,
-		"total_edits":       result.TotalEdits,
+		"active_wikis":       result.ActiveWikis,
+		"total_pages":        result.TotalPages,
+		"total_edits":        result.TotalEdits,
 	}, nil
 }

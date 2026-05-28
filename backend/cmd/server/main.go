@@ -18,6 +18,7 @@ import (
 	"wikikeeper-backend/internal/handlers"
 	applogger "wikikeeper-backend/internal/logger"
 	appmiddleware "wikikeeper-backend/internal/middleware"
+	"wikikeeper-backend/internal/pages"
 	"wikikeeper-backend/internal/services"
 )
 
@@ -28,7 +29,6 @@ func main() {
 	// Initialize logger
 	applogger.Init(cfg.LogLevel)
 	applogger.Log.Info("starting WikiKeeper",
-		"version", cfg.AppVersion,
 		"port", cfg.Port,
 	)
 
@@ -96,15 +96,29 @@ func main() {
 	authHandler := handlers.NewAuthHandler(cfg)
 	extensionsHandler := handlers.NewExtensionsHandler(db)
 
-	// Routes
-	e.GET("/", func(c echo.Context) error {
-		return c.JSON(200, map[string]string{
-			"name":    cfg.AppName,
-			"version": cfg.AppVersion,
-			"docs":    "/docs",
-			"health":  "/health",
-		})
-	})
+	// Initialize page handlers
+	collectorService := services.NewCollectorService(db, mwService, cfg)
+	pagesHandler := pages.NewPages(db, cfg, collectorService, archiveService)
+
+	// Serve static files
+	e.Static("/static", "web/static")
+
+	// Page routes (HTML)
+	e.GET("/", pagesHandler.Dashboard)
+	e.GET("/wikis", pagesHandler.WikiList)
+	e.GET("/wikis/add", pagesHandler.WikiAdd)
+	e.POST("/wikis", pagesHandler.WikiAddSubmit)
+	e.GET("/wikis/:id", pagesHandler.WikiDetail)
+	e.POST("/wikis/:id/check", pagesHandler.TriggerCheck)
+	e.POST("/wikis/:id/check-archive", pagesHandler.TriggerArchiveCheck)
+	e.GET("/extensions", pagesHandler.ExtensionList)
+	e.GET("/extensions/:name", pagesHandler.ExtensionDetail)
+
+	admin := e.Group("/admin")
+	admin.Use(appmiddleware.AdminAuth(cfg))
+	admin.DELETE("/wikis/:id", pagesHandler.AdminDeleteWiki)
+	admin.POST("/collect-all", pagesHandler.AdminCollectAll)
+	admin.POST("/check-all-archives", pagesHandler.AdminCheckAllArchives)
 
 	e.GET("/health", healthHandler.Check)
 
@@ -137,16 +151,16 @@ func main() {
 	api.POST("/wikis/:id/check-archive", wikiHandler.CheckArchive)
 
 	// Admin routes - require admin token
-	admin := api.Group("/admin")
-	admin.Use(appmiddleware.AdminAuth(cfg))
+	adminAPI := api.Group("/admin")
+	adminAPI.Use(appmiddleware.AdminAuth(cfg))
 
 	// Admin wiki management
-	admin.DELETE("/wikis/:id", adminHandler.DeleteWiki)
-	admin.GET("/wikis/:id/stats", adminHandler.GetWikiStats)
+	adminAPI.DELETE("/wikis/:id", adminHandler.DeleteWiki)
+	adminAPI.GET("/wikis/:id/stats", adminHandler.GetWikiStats)
 
 	// Admin bulk operations
-	admin.POST("/collect-all", adminHandler.CollectAll)
-	admin.POST("/check-all-archives", adminHandler.CheckAllArchives)
+	adminAPI.POST("/collect-all", adminHandler.CollectAll)
+	adminAPI.POST("/check-all-archives", adminHandler.CheckAllArchives)
 
 	// Prometheus metrics endpoint
 	e.GET("/metrics", echo.WrapHandler(promhttp.Handler()))

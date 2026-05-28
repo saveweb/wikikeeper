@@ -1,0 +1,91 @@
+{{define "content"}}
+<div class="space-y-6">
+    <div class="flex items-center gap-3">
+        <a href="/extensions" class="text-gray-400 hover:text-gray-600">&larr; Extensions</a>
+        <h1 class="text-2xl font-bold text-gray-900">{{.Name}}</h1>
+    </div>
+
+    {{if .Versions}}
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+            <h2 class="text-sm font-semibold text-gray-700">Version Distribution ({{.TotalWikis}} wikis)</h2>
+        </div>
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Version</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Wikis</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Share</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+            {{range .Versions}}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2 text-sm font-medium text-gray-900">{{if .Version}}{{.Version}}{{else}}<span class="text-gray-400">unknown</span>{{end}}</td>
+                    <td class="px-4 py-2 text-sm text-gray-700">{{.Count}}</td>
+                    <td class="px-4 py-2">
+                        <div class="w-full bg-gray-200 rounded-full h-2 max-w-xs">
+                            <div class="bg-primary-500 h-2 rounded-full" style="width:{{.Percent}}%"></div>
+                        </div>
+                    </td>
+                </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+            <h2 class="text-sm font-semibold text-gray-700">Wikis using this extension</h2>
+        </div>
+        <div id="ext-wiki-list">
+            {{template "ext_wiki_rows" .}}
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "ext_wiki_rows"}}
+<table class="min-w-full divide-y divide-gray-200">
+    <thead class="bg-gray-50">
+        <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Wiki</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">URL</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Version</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Snapshot</th>
+        </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-200">
+    {{range .Wikis}}
+        <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3"><a href="/wikis/{{.WikiID}}" class="text-primary-600 hover:underline font-medium text-sm">{{toa .WikiName}}</a></td>
+            <td class="px-4 py-3"><a href="{{.URL}}" target="_blank" class="text-sm text-gray-500 hover:text-gray-700">{{truncate .URL 40}}</a></td>
+            <td class="px-4 py-3 text-sm text-gray-700">{{toa .ExtensionVersion}}</td>
+            <td class="px-4 py-3 text-sm text-gray-400">{{toa .SnapshotAt}}</td>
+        </tr>
+    {{else}}
+        <tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">No wikis found</td></tr>
+    {{end}}
+    </tbody>
+</table>
+{{if .WikiPages}}
+<div class="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+    <span class="text-sm text-gray-500">Page {{.WikiPage}} of {{.WikiPages}}</span>
+    <div class="flex gap-2">
+        {{if gt .WikiPage 1}}
+        <a href="/extensions/{{$.Name}}?wiki_page={{sub .WikiPage 1}}"
+           hx-get="/extensions/{{$.Name}}?wiki_page={{sub .WikiPage 1}}"
+           hx-target="#ext-wiki-list" hx-swap="innerHTML"
+           class="px-3 py-1 border rounded text-sm hover:bg-gray-100">&larr; Prev</a>
+        {{end}}
+        {{if lt .WikiPage .WikiPages}}
+        <a href="/extensions/{{$.Name}}?wiki_page={{add .WikiPage 1}}"
+           hx-get="/extensions/{{$.Name}}?wiki_page={{add .WikiPage 1}}"
+           hx-target="#ext-wiki-list" hx-swap="innerHTML"
+           class="px-3 py-1 border rounded text-sm hover:bg-gray-100">Next &rarr;</a>
+        {{end}}
+</div>
+</div>
+{{end}}
+{{end}}

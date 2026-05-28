@@ -47,11 +47,9 @@ uv.lock
 .pdm-python
 .pdm-build/
 
-# Node.js / Frontend
+# Node.js
 node_modules/
 dist/
-.svelte-kit/
-build/
 
 # Logs
 *.log

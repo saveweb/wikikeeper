@@ -1,8 +1,7 @@
-# Development environment - starts all local development services
+# Development environment
 # Usage: docker compose -f docker-compose.dev.yml up -d
 
 services:
-  # PostgreSQL Database for development
   postgres:
     image: postgres:16-alpine
     container_name: wikikeeper-postgres-dev
@@ -15,17 +14,13 @@ services:
       - "5432:5432"
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
-      - ./docker/postgres.conf:/etc/postgresql/postgresql.conf
     shm_size: 2g
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U wikikeeper"]
       interval: 5s
       timeout: 5s
       retries: 10
-    networks:
-      - wikikeeper-dev
 
-  # Backend API (Go) - runs locally mounted code with hot reload
   backend:
     build:
       context: ./backend
@@ -50,30 +45,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    networks:
-      - wikikeeper-dev
-    stdin_open: true
-    tty: true
 
-  # Frontend (SvelteKit/Vite) - runs locally mounted code with hot reload
-  frontend:
-    image: node:20-alpine
-    container_name: wikikeeper-frontend-dev
-    working_dir: /app
-    environment:
-      - VITE_API_URL=http://localhost:8000
-    ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - frontend_deps:/app/node_modules
-    command: sh -c "npm install && npm run dev -- --host"
-    networks:
-      - wikikeeper-dev
-    stdin_open: true
-    tty: true
-
-  # Optional: Adminer for database management
   adminer:
     image: adminer:latest
     container_name: wikikeeper-adminer-dev
@@ -85,8 +57,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    networks:
-      - wikikeeper-dev
     profiles:
       - tools
 
@@ -95,9 +65,3 @@ volumes:
     driver: local
   backend_deps:
     driver: local
-  frontend_deps:
-    driver: local
-
-networks:
-  wikikeeper-dev:
-    driver: bridge

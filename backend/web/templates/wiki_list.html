@@ -1,0 +1,96 @@
+{{define "content"}}
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-900">Wikis</h1>
+        <a href="/wikis/add" class="bg-primary-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-primary-700">+ Add Wiki</a>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <form id="wiki-filters" class="flex flex-wrap gap-3 items-end">
+            <div class="flex-1 min-w-[200px]">
+                <input type="text" name="search" value="{{.Search}}" placeholder="Search wikis..."
+                       hx-get="/wikis" hx-target="#wiki-list-content" hx-swap="innerHTML"
+                       hx-trigger="keyup changed delay:300ms, search" hx-include="#wiki-filters"
+                       class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+            </div>
+            <select name="status" hx-get="/wikis" hx-target="#wiki-list-content" hx-swap="innerHTML" hx-include="#wiki-filters"
+                    hx-trigger="change" class="border border-gray-300 rounded px-3 py-2 text-sm">
+                <option value="" {{if eq .Status ""}}selected{{end}}>All Status</option>
+                <option value="ok" {{if eq .Status "ok"}}selected{{end}}>OK</option>
+                <option value="error" {{if eq .Status "error"}}selected{{end}}>Error</option>
+                <option value="pending" {{if eq .Status "pending"}}selected{{end}}>Pending</option>
+                <option value="offline" {{if eq .Status "offline"}}selected{{end}}>Offline</option>
+            </select>
+            <select name="has_archive" hx-get="/wikis" hx-target="#wiki-list-content" hx-swap="innerHTML" hx-include="#wiki-filters"
+                    hx-trigger="change" class="border border-gray-300 rounded px-3 py-2 text-sm">
+                <option value="" {{if eq .Archive ""}}selected{{end}}>All</option>
+                <option value="true" {{if eq .Archive "true"}}selected{{end}}>Has Archive</option>
+                <option value="false" {{if eq .Archive "false"}}selected{{end}}>No Archive</option>
+            </select>
+            <select name="order_by" hx-get="/wikis" hx-target="#wiki-list-content" hx-swap="innerHTML" hx-include="#wiki-filters"
+                    hx-trigger="change" class="border border-gray-300 rounded px-3 py-2 text-sm">
+                <option value="updated_at DESC" {{if eq .OrderBy "updated_at DESC"}}selected{{end}}>Recently Updated</option>
+                <option value="created_at DESC" {{if eq .OrderBy "created_at DESC"}}selected{{end}}>Newest</option>
+                <option value="sitename ASC" {{if eq .OrderBy "sitename ASC"}}selected{{end}}>Name A-Z</option>
+                <option value="last_check_at ASC NULLS FIRST" {{if eq .OrderBy "last_check_at ASC NULLS FIRST"}}selected{{end}}>Unchecked First</option>
+            </select>
+        </form>
+    </div>
+
+    <div id="wiki-list-content">
+        {{template "wiki_list_content" .}}
+    </div>
+</div>
+{{end}}
+
+{{define "wiki_list_content"}}
+<div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+    <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 text-sm text-gray-500">
+        {{.Total}} wikis found
+    </div>
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Wiki</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">URL</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Archive</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">MW Version</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Check</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+        {{range .Wikis}}
+            <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3">
+                    <a href="/wikis/{{.ID}}" class="text-primary-600 hover:underline font-medium">{{toa .Sitename}}</a>
+                    {{if .WikiName}}<div class="text-xs text-gray-400">{{truncate (toa .WikiName) 30}}</div>{{end}}
+                </td>
+                <td class="px-4 py-3">
+                    <a href="{{.URL}}" class="text-sm text-gray-500 hover:text-gray-700 truncate block max-w-xs" target="_blank">{{truncate .URL 45}}</a>
+                </td>
+                <td class="px-4 py-3">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-{{statusColor .Status}}-100 text-{{statusColor .Status}}-700">
+                        {{.Status}}
+                    </span>
+                </td>
+                <td class="px-4 py-3">
+                    {{if .HasArchive}}
+                    <span class="text-green-600 text-sm font-medium">Yes</span>
+                    {{else}}
+                    <span class="text-gray-400 text-sm">No</span>
+                    {{end}}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-500">{{toa .MediaWikiVersion}}</td>
+                <td class="px-4 py-3 text-sm text-gray-500">
+                    {{if .LastCheckAt}}{{relTime (toa .LastCheckAt)}}{{else}}<span class="text-gray-400">never</span>{{end}}
+                </td>
+            </tr>
+        {{else}}
+            <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">No wikis found</td></tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+{{template "pagination" .}}
+{{end}}

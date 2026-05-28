@@ -1,0 +1,260 @@
+{{define "content"}}
+<div class="space-y-6">
+    <div class="flex items-center gap-3">
+        <a href="/wikis" class="text-gray-400 hover:text-gray-600"
+            >&larr; Wikis</a
+        >
+        <h1 class="text-2xl font-bold text-gray-900">{{toa .Wiki.Sitename}}</h1>
+        <span
+            class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-{{statusColor .Wiki.Status}}-100 text-{{statusColor .Wiki.Status}}-700"
+        >
+            {{.Wiki.Status}}
+        </span>
+    </div>
+
+    {{if .Wiki.URL}}
+    <div class="text-sm text-gray-500">
+        <a
+            href="{{.Wiki.URL}}"
+            target="_blank"
+            class="text-primary-600 hover:underline"
+            >{{.Wiki.URL}}</a
+        >
+    </div>
+    {{end}}
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div class="text-xs font-medium text-gray-500">Language</div>
+            <div class="text-sm font-medium text-gray-900 mt-1">
+                {{toa .Wiki.Lang}}
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div class="text-xs font-medium text-gray-500">MW Version</div>
+            <div class="text-sm font-medium text-gray-900 mt-1">
+                {{toa .Wiki.MediaWikiVersion}}
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div class="text-xs font-medium text-gray-500">DB</div>
+            <div class="text-sm font-medium text-gray-900 mt-1">
+                {{toa .Wiki.DBType}} {{toa .Wiki.DBVersion}}
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div class="text-xs font-medium text-gray-500">Archive</div>
+            <div class="text-sm font-medium mt-1">
+                {{if .Wiki.HasArchive}}<span class="text-green-600">Yes</span
+                >{{else}}<span class="text-gray-400">No</span>{{end}}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex flex-wrap gap-3">
+        <button
+            hx-post="/wikis/{{.Wiki.ID}}/check"
+            hx-target="#action-result"
+            hx-swap="innerHTML"
+            hx-indicator="#check-indicator"
+            class="bg-primary-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-primary-700"
+        >
+            <span id="check-indicator" class="htmx-indicator">Checking...</span>
+            Check Stats
+        </button>
+        <button
+            hx-post="/wikis/{{.Wiki.ID}}/check-archive"
+            hx-target="#action-result"
+            hx-swap="innerHTML"
+            hx-indicator="#archive-indicator"
+            class="bg-purple-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-purple-700"
+        >
+            <span id="archive-indicator" class="htmx-indicator"
+                >Checking...</span
+            >
+            Check Archive
+        </button>
+        {{if .IsAdmin}}
+        <button
+            hx-delete="/admin/wikis/{{.Wiki.ID}}"
+            hx-confirm="Delete this wiki? This cannot be undone."
+            hx-target="body"
+            hx-swap="none"
+            class="bg-red-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-red-700"
+        >
+            Delete
+        </button>
+        {{end}}
+        <span id="action-result" class="text-sm self-center"></span>
+    </div>
+
+    {{with .LatestStats}}
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div class="bg-white rounded-lg border border-gray-200 p-3 text-center">
+            <div class="text-xs text-gray-500">Pages</div>
+            <div class="text-lg font-bold">{{.Pages}}</div>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-200 p-3 text-center">
+            <div class="text-xs text-gray-500">Articles</div>
+            <div class="text-lg font-bold">{{.Articles}}</div>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-200 p-3 text-center">
+            <div class="text-xs text-gray-500">Edits</div>
+            <div class="text-lg font-bold">{{.Edits}}</div>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-200 p-3 text-center">
+            <div class="text-xs text-gray-500">Images</div>
+            <div class="text-lg font-bold">{{.Images}}</div>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-200 p-3 text-center">
+            <div class="text-xs text-gray-500">Users</div>
+            <div class="text-lg font-bold">{{.Users}}</div>
+        </div>
+    </div>
+    {{end}} {{if .StatsJSON}}
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Stats History</h2>
+        <canvas id="stats-chart" height="100"></canvas>
+    </div>
+    {{end}} {{with .Extensions}}
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-semibold text-gray-700">
+                Extensions ({{len .Items}})
+            </h2>
+            {{if .MediaWikiVersion}}<span class="text-xs text-gray-400"
+                >MW {{.MediaWikiVersion}}</span
+            >{{end}}
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+            {{range .Items}}
+            <a
+                href="/extensions/{{.Name}}"
+                class="inline-flex items-center px-2 py-1 rounded text-xs bg-blue-50 text-blue-700 hover:bg-blue-100"
+            >
+                {{.Name}} {{if .Version}}<span class="ml-1 text-blue-400"
+                    >{{truncate (toa .Version) 10}}</span
+                >{{end}}
+            </a>
+            {{end}}
+        </div>
+    </div>
+    {{end}} {{if .Archives}}
+    <div
+        class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
+    >
+        <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+            <h2 class="text-sm font-semibold text-gray-700">
+                Archive.org Backups ({{len .Archives}})
+            </h2>
+        </div>
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th
+                        class="px-4 py-2 text-left text-xs font-medium text-gray-500"
+                    >
+                        Identifier
+                    </th>
+                    <th
+                        class="px-4 py-2 text-left text-xs font-medium text-gray-500"
+                    >
+                        Date
+                    </th>
+                    <th
+                        class="px-4 py-2 text-left text-xs font-medium text-gray-500"
+                    >
+                        Size
+                    </th>
+                    <th
+                        class="px-4 py-2 text-left text-xs font-medium text-gray-500"
+                    >
+                        Contents
+                    </th>
+                    <th
+                        class="px-4 py-2 text-left text-xs font-medium text-gray-500"
+                    >
+                        Uploader
+                    </th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {{range .Archives}}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2">
+                        <a
+                            href="https://archive.org/details/{{.IAIdentifier}}"
+                            target="_blank"
+                            class="text-primary-600 hover:underline text-sm"
+                            >{{.IAIdentifier}}</a
+                        >
+                    </td>
+                    <td class="px-4 py-2 text-sm text-gray-500">
+                        {{toa .DumpDate}}
+                    </td>
+                    <td class="px-4 py-2 text-sm text-gray-500">
+                        {{if .ItemSize}}{{formatBytes (toa .ItemSize)}}{{end}}
+                    </td>
+                    <td class="px-4 py-2 text-xs space-x-1">
+                        {{if .HasXMLCurrent}}<span
+                            class="bg-green-100 text-green-700 px-1.5 py-0.5 rounded"
+                            >XML</span
+                        >{{end}} {{if .HasXMLHistory}}<span
+                            class="bg-green-100 text-green-700 px-1.5 py-0.5 rounded"
+                            >History</span
+                        >{{end}} {{if .HasImagesDump}}<span
+                            class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded"
+                            >Images</span
+                        >{{end}} {{if .HasTitlesList}}<span
+                            class="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded"
+                            >Titles</span
+                        >{{end}}
+                    </td>
+                    <td class="px-4 py-2 text-sm text-gray-500">
+                        {{toa .Uploader}}
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+
+    <div class="grid grid-cols-2 gap-4 text-xs text-gray-400">
+        <div>Created: {{toa .Wiki.CreatedAt}}</div>
+        <div>Updated: {{toa .Wiki.UpdatedAt}}</div>
+        <div>Last Check: {{toa .Wiki.LastCheckAt}}</div>
+        <div>Archive Check: {{toa .Wiki.ArchiveLastCheckAt}}</div>
+    </div>
+</div>
+{{end}} {{define "head"}} {{if .StatsJSON}}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{{end}} {{end}} {{define "scripts"}} {{if .StatsJSON}}
+<script>
+    (function() {
+        const data = {{.StatsJSON}};
+        if (!data || data.length === 0) return;
+        const labels = data.map(d => d.Time ? new Date(d.Time).toLocaleDateString() : '');
+        new Chart(document.getElementById('stats-chart'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Pages', data: data.map(d => d.Pages), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: false, tension: 0.1 },
+                    { label: 'Articles', data: data.map(d => d.Articles), borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', fill: false, tension: 0.1 },
+                    { label: 'Edits', data: data.map(d => d.Edits), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', fill: false, tension: 0.1, yAxisID: 'y1' }
+                ]
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    y: { beginAtZero: true, title: { display: true, text: 'Pages / Articles' } },
+                    y1: { position: 'right', beginAtZero: true, title: { display: true, text: 'Edits' }, grid: { drawOnChartArea: false } }
+                },
+                plugins: { legend: { position: 'top' } }
+            }
+        });
+    })();
+</script>
+{{end}} {{end}}

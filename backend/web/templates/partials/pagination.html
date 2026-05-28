@@ -1,0 +1,40 @@
+{{define "pagination"}}
+{{if .Pages}}
+<div class="flex items-center justify-between mt-4">
+    <span class="text-sm text-gray-500">Page {{.Page}} of {{.Pages}} ({{.Total}} results)</span>
+    <div class="flex gap-1">
+        {{if gt .Page 1}}
+        <a href="{{.BaseURL}}?page={{sub .Page }}&page_size={{.PageSize}}&status={{.Status}}&has_archive={{.Archive}}&search={{.Search}}&order_by={{.OrderBy}}"
+           hx-get="{{.BaseURL}}?page={{sub .Page 1}}&page_size={{.PageSize}}&status={{.Status}}&has_archive={{.Archive}}&search={{.Search}}&order_by={{.OrderBy}}"
+           hx-target="#wiki-list-content" hx-swap="innerHTML"
+           class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-100">&larr;</a>
+        {{end}}
+        
+        {{ $start := sub .Page 2 }}
+        {{if lt $start 1}}{{ $start = 1 }}{{end}}
+        {{ $end := add .Page 2 }}
+        {{if gt $end .Pages}}{{ $end = .Pages }}{{end}}
+        
+        {{range $i := seq $end}}
+            {{if and (ge $i $start) (le $i $.Pages)}}
+            {{if eq $i $.Page}}
+            <span class="px-3 py-1 bg-primary-600 text-white rounded text-sm">{{$i}}</span>
+            {{else}}
+            <a href="{{$.BaseURL}}?page={{$i}}&page_size={{$.PageSize}}&status={{$.Status}}&has_archive={{$.Archive}}&search={{$.Search}}&order_by={{$.OrderBy}}"
+               hx-get="{{$.BaseURL}}?page={{$i}}&page_size={{$.PageSize}}&status={{$.Status}}&has_archive={{$.Archive}}&search={{$.Search}}&order_by={{$.OrderBy}}"
+               hx-target="#wiki-list-content" hx-swap="innerHTML"
+               class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-100">{{$i}}</a>
+            {{end}}
+            {{end}}
+        {{end}}
+        
+        {{if lt .Page .Pages}}
+        <a href="{{.BaseURL}}?page={{add .Page 1}}&page_size={{.PageSize}}&status={{.Status}}&has_archive={{.Archive}}&search={{.Search}}&order_by={{.OrderBy}}"
+           hx-get="{{.BaseURL}}?page={{add .Page 1}}&page_size={{.PageSize}}&status={{.Status}}&has_archive={{.Archive}}&search={{.Search}}&order_by={{.OrderBy}}"
+           hx-target="#wiki-list-content" hx-swap="innerHTML"
+           class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-100">&rarr;</a>
+        {{end}}
+    </div>
+</div>
+{{end}}
+{{end}}

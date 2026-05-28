@@ -3,8 +3,7 @@
 		dev-docker dev-docker-down dev-docker-logs \
 		dev-local dev-local-down \
 		db-reset db-migrate db-migrate-create db-shell db-dump \
-		test-all test-unit test-integration lint fmt check \
-		frontend-install frontend-dev frontend-build
+		test-all test-unit test-integration lint fmt check
 
 # Docker compose configuration
 DC_ROOT := docker compose -f ../docker-compose.yml
@@ -27,8 +26,8 @@ help: ## Show this help message
 	@echo 'Usage: make [target]'
 	@echo ''
 	@echo '🚀 Quick Start:'
-	@echo '  dev-docker           Start ALL services in Docker (postgres + backend + frontend)'
-	@echo '  dev-local            Start DB in Docker, run backend+frontend locally'
+	@echo '  dev-docker           Start ALL services in Docker (postgres + backend)'
+	@echo '  dev-local            Start DB in Docker, run backend locally'
 	@echo ''
 	@echo '🐳 Docker Development (ALL in Docker):'
 	@echo '  dev-docker           Start all services in Docker'
@@ -73,33 +72,29 @@ help: ## Show this help message
 # 🚀 Quick Start Commands
 # =============================================================================
 
-dev-docker: ## Start ALL services in Docker (recommended)
-	@echo "🚀 Starting all services in Docker..."
+dev-docker: ## Start all services in Docker (recommended)
+	@echo "Starting all services in Docker..."
 	@echo ""
 	$(DC_DEV) up -d
-	@echo "⏳ Waiting for services to be ready..."
+	@echo "Waiting for services..."
 	@sleep 5
 	@until docker exec wikikeeper-postgres-dev pg_isready -U wikikeeper > /dev/null 2>&1; do sleep 1; done
 	@echo ""
-	@echo "✅ All services started!"
+	@echo "All services started!"
 	@echo ""
-	@echo "📍 Services:"
-	@echo "  - Frontend:  http://localhost:5173"
-	@echo "  - Backend:   http://localhost:8000"
+	@echo "Services:"
+	@echo "  - App:       http://localhost:8000"
 	@echo "  - Database:  localhost:5432"
-	@echo ""
-	@echo "Run 'make db-migrate' to initialize the database"
 
-dev-local: ## Start DB in Docker, run backend+frontend locally
-	@echo "💻 Starting development environment (local mode)..."
+dev-local: ## Start DB in Docker, run backend locally
+	@echo "Starting development environment (local mode)..."
 	@echo ""
 	@make dev-local-db
 	@echo ""
-	@echo "✅ Database is ready!"
+	@echo "Database is ready!"
 	@echo ""
-	@echo "Now run in separate terminals:"
-	@echo "  Terminal 1: make run-dev      (backend with hot reload)"
-	@echo "  Terminal 2: make frontend-dev (frontend)"
+	@echo "Now run:"
+	@echo "  make run-dev      (backend with hot reload)"
 	@echo ""
 	@echo "Or use docker for everything: make dev-docker"
 
@@ -110,14 +105,14 @@ dev-local: ## Start DB in Docker, run backend+frontend locally
 dev-up: dev-docker ## Alias for dev-docker
 
 dev-docker: ## Start all services in Docker
-	@echo "🚀 Starting all services in Docker..."
+	@echo "Starting all services in Docker..."
 	$(DC_DEV) up -d
 
 dev-down: dev-docker-down ## Alias for dev-docker-down
 
 dev-docker-down: ## Stop all Docker services
 	$(DC_DEV) down
-	@echo "✅ Docker services stopped"
+	@echo "Docker services stopped"
 
 dev-logs: dev-docker-logs ## Alias for dev-docker-logs
 
@@ -125,33 +120,25 @@ dev-docker-logs: ## Show logs from all Docker services
 	$(DC_DEV) logs -f
 
 dev-docker-tools: ## Start all services + Adminer (DB UI at :8080)
-	@echo "🚀 Starting all services with Adminer..."
+	@echo "Starting all services with Adminer..."
 	$(DC_DEV) --profile tools up -d
-	@echo "✅ Services started with Adminer at http://localhost:8080"
+	@echo "Services started with Adminer at http://localhost:8080"
 
 dev-restart: ## Restart all Docker services
 	$(DC_DEV) restart
-	@echo "✅ Services restarted"
+	@echo "Services restarted"
 
 # =============================================================================
 # 💻 Local Development (DB only in Docker)
 # =============================================================================
 
 dev-local-db: ## Start database only in Docker
-	@echo "🗄️  Starting PostgreSQL in Docker..."
+	@echo "Starting PostgreSQL in Docker..."
 	$(DC_DEV) up -d postgres
-	@echo "⏳ Waiting for database..."
+	@echo "Waiting for database..."
 	@until docker exec wikikeeper-postgres-dev pg_isready -U wikikeeper > /dev/null 2>&1; do sleep 1; done
 	@echo ""
-	@echo "✅ PostgreSQL is ready!"
-	@echo ""
-	@echo "Connection info:"
-	@echo "  Host:     localhost"
-	@echo "  Port:     5432"
-	@echo "  Database: wikikeeper"
-	@echo "  User:     wikikeeper"
-	@echo "  Password: wikikeeper123"
-	@echo ""
+	@echo "PostgreSQL is ready!"
 
 dev-local-down: ## Stop Docker database
 	$(DC_DEV) down
@@ -220,20 +207,6 @@ run: ## Run the application locally (requires dev DB running)
 run-dev: ## Run with hot reload (requires air)
 	@command -v air >/dev/null 2>&1 || { echo "Installing air..."; go install github.com/air-verse/air@latest; }
 	air
-
-# =============================================================================
-# 🎨 Frontend
-# =============================================================================
-
-frontend-install: ## Install frontend dependencies
-	cd ../frontend && npm install
-
-frontend-dev: ## Start frontend dev server locally
-	@echo "🎨 Starting frontend dev server..."
-	cd ../frontend && npm run dev
-
-frontend-build: ## Build frontend for production
-	cd ../frontend && npm run build
 
 # =============================================================================
 # 🧪 Testing

@@ -26,7 +26,7 @@ func (h *StatsHandler) Summary(c echo.Context) error {
 	wikiRepo := repository.NewWikiRepository(h.db)
 	ctx := c.Request().Context()
 
-	stats, err := wikiRepo.GetSummaryStats(ctx)
+	stats, err := wikiRepo.GetSummaryStats(ctx, false)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"detail": err.Error()})
 	}
