@@ -73,6 +73,45 @@ func TestRenderPartialLoadsPageTemplate(t *testing.T) {
 	}
 }
 
+func TestWikiLabelFallsBackToHostname(t *testing.T) {
+	sitename := " Akasa Universe Wiki "
+	wikiName := "Custom label"
+	empty := "   "
+
+	require.Equal(t, "Akasa Universe Wiki", wikiLabel(&sitename, &wikiName, "https://akasauniverse.miraheze.org/w/"))
+	require.Equal(t, "Custom label", wikiLabel(nil, &wikiName, "https://akasauniverse.miraheze.org/w/"))
+	require.Equal(t, "alacity.miraheze.org", wikiLabel(&empty, nil, "https://Alacity.Miraheze.org/w/"))
+	require.Equal(t, "alacity.miraheze.org", wikiLabel(nil, nil, "alacity.miraheze.org/w/"))
+}
+
+func TestDashboardMissingWikiNameUsesLinkedHostname(t *testing.T) {
+	wikiID := uuid.New()
+	p := &Pages{
+		cfg:         &config.Config{LogLevel: "INFO"},
+		templateDir: "../../web/templates",
+	}
+	p.baseTemplates = p.parseBaseTemplates()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, p.render(c, "dashboard.html", M{
+		"RecentWikis": []*models.Wiki{{
+			ID:        wikiID,
+			URL:       "https://alacity.miraheze.org/w/",
+			Status:    models.WikiStatusError,
+			UpdatedAt: time.Now(),
+		}},
+	}))
+
+	body := rec.Body.String()
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, body, `href="/wikis/`+wikiID.String()+`"`)
+	require.Contains(t, body, ">alacity.miraheze.org</a>")
+}
+
 func TestStatsChartPointsAreChronological(t *testing.T) {
 	wikiID := uuid.New()
 	newer := time.Date(2026, time.July, 31, 12, 0, 0, 0, time.UTC)

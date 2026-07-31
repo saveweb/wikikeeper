@@ -71,7 +71,7 @@
                 <tbody class="divide-y divide-gray-200">
                 {{range .RecentWikis}}
                     <tr class="hover:bg-gray-50">
-                        <td class="px-4 py-3"><a href="/wikis/{{.ID}}" class="text-primary-600 hover:underline font-medium">{{toa .Sitename}}</a></td>
+                        <td class="px-4 py-3"><a href="/wikis/{{.ID}}" class="text-primary-600 hover:underline font-medium">{{wikiLabel .Sitename .WikiName .URL}}</a></td>
                         <td class="px-4 py-3 text-sm text-gray-500 truncate max-w-xs">{{truncate .URL 50}}</td>
                         <td class="px-4 py-3">
                             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-{{statusColor .Status}}-100 text-{{statusColor .Status}}-700">

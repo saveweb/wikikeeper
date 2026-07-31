@@ -63,7 +63,7 @@
         {{range .Wikis}}
             <tr class="hover:bg-gray-50">
                 <td class="px-4 py-3">
-                    <a href="/wikis/{{.ID}}" class="text-primary-600 hover:underline font-medium">{{toa .Sitename}}</a>
+                    <a href="/wikis/{{.ID}}" class="text-primary-600 hover:underline font-medium">{{wikiLabel .Sitename .WikiName .URL}}</a>
                     {{if .WikiName}}<div class="text-xs text-gray-400">{{truncate (toa .WikiName) 30}}</div>{{end}}
                 </td>
                 <td class="px-4 py-3">

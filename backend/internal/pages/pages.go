@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -152,6 +153,7 @@ func funcMap() template.FuncMap {
 		"div":          func(a, b int) int { return a / b },
 		"seq":          seq,
 		"toa":          toa,
+		"wikiLabel":    wikiLabel,
 		"statusColor":  statusColor,
 		"json":         toJS,
 		"tolower":      strings.ToLower,
@@ -261,6 +263,23 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return string(r[:n]) + "..."
+}
+
+func wikiLabel(sitename, wikiName *string, rawURL string) string {
+	for _, name := range []*string{sitename, wikiName} {
+		if name != nil && strings.TrimSpace(*name) != "" {
+			return strings.TrimSpace(*name)
+		}
+	}
+
+	parsed, err := url.Parse(rawURL)
+	if err == nil && parsed.Hostname() == "" {
+		parsed, err = url.Parse("//" + rawURL)
+	}
+	if err == nil && parsed.Hostname() != "" {
+		return strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
+	}
+	return rawURL
 }
 
 func seq(n int) []int {
