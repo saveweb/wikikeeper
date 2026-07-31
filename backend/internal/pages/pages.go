@@ -93,11 +93,18 @@ func (p *Pages) render(c echo.Context, pageFile string, data M) error {
 	return c.HTMLBlob(http.StatusOK, buf.Bytes())
 }
 
-func (p *Pages) renderPartial(c echo.Context, templateName string, data M) error {
-	t := p.getTemplates()
+func (p *Pages) renderPartial(c echo.Context, pageFile, templateName string, data M) error {
+	t, err := p.getTemplates().Clone()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "template clone: "+err.Error())
+	}
+	if _, err := t.ParseFiles(filepath.Join(p.templateDir, pageFile)); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "template parse "+pageFile+": "+err.Error())
+	}
+
 	var buf bytes.Buffer
 	if err := t.ExecuteTemplate(&buf, templateName, data); err != nil {
-		return err
+		return echo.NewHTTPError(http.StatusInternalServerError, "template execute "+pageFile+": "+err.Error())
 	}
 	return c.HTMLBlob(http.StatusOK, buf.Bytes())
 }

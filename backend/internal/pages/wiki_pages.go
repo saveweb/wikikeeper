@@ -48,12 +48,12 @@ func (p *Pages) WikiList(c echo.Context) error {
 
 	wikiRepo := repository.NewWikiRepository(p.db)
 	wikis, total, err := wikiRepo.List(ctx, repository.ListOptions{
-		Page:      page,
-		PageSize:  pageSize,
-		Status:    statusFilter,
+		Page:       page,
+		PageSize:   pageSize,
+		Status:     statusFilter,
 		HasArchive: archiveFilter,
-		Search:    search,
-		OrderBy:   orderBy,
+		Search:     search,
+		OrderBy:    orderBy,
 	})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
@@ -71,7 +71,7 @@ func (p *Pages) WikiList(c echo.Context) error {
 	data["BaseURL"] = "/wikis"
 
 	if p.isHTMX(c) {
-		return p.renderPartial(c, "wiki_list_content", data)
+		return p.renderPartial(c, "wiki_list.html", "wiki_list_content", data)
 	}
 	return p.render(c, "wiki_list.html", data)
 }

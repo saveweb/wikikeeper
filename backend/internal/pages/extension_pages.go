@@ -40,7 +40,7 @@ func (p *Pages) ExtensionList(c echo.Context) error {
 	data["BaseURL"] = "/extensions"
 
 	if p.isHTMX(c) {
-		return p.renderPartial(c, "ext_list_content", data)
+		return p.renderPartial(c, "extension_list.html", "ext_list_content", data)
 	}
 	return p.render(c, "extension_list.html", data)
 }
