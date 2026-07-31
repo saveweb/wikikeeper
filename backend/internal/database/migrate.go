@@ -50,6 +50,10 @@ var migrations = []Migration{
 		Version: 7,
 		Name:    "add_collection_state",
 	},
+	{
+		Version: 8,
+		Name:    "add_provider_rate_limits",
+	},
 }
 
 // RunMigrations executes all pending migrations

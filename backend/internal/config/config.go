@@ -20,8 +20,10 @@ type Config struct {
 	DBName     string
 
 	// HTTP Client
-	HTTPTimeout   float64
-	HTTPUserAgent string
+	HTTPTimeout             float64
+	HTTPUserAgent           string
+	ProviderRequestInterval float64
+	FandomRequestInterval   float64
 
 	// Siteinfo check settings
 	SiteinfoCheckBatchSize int // Number of wikis to check per cycle
@@ -52,20 +54,22 @@ func Load() *Config {
 	godotenv.Load()
 
 	cfg = &Config{
-		Host:                   getEnv("HOST", "0.0.0.0"),
-		Port:                   getEnvInt("PORT", 8000),
-		DBHost:                 getEnv("DB_HOST", "localhost"),
-		DBPort:                 getEnv("DB_PORT", "5432"),
-		DBUser:                 getEnv("DB_USER", "wikikeeper"),
-		DBPassword:             getEnv("DB_PASSWORD", "wikikeeper123"),
-		DBName:                 getEnv("DB_NAME", "wikikeeper"),
-		HTTPTimeout:            getEnvFloat("HTTP_TIMEOUT", 30.0),
-		HTTPUserAgent:          getEnv("HTTP_USER_AGENT", "WikiKeeper/0.3.0 (https://wikikeeper.saveweb.org/)"),
-		SiteinfoCheckBatchSize: getEnvInt("SITEINFO_CHECK_BATCH_SIZE", 100), // Check 100 wikis per cycle
-		ArchiveCheckBatchSize:  getEnvInt("ARCHIVE_CHECK_BATCH_SIZE", 100),  // Check 100 wikis per cycle
-		AdminToken:             getEnv("ADMIN_TOKEN", ""),                   // Empty means no admin protection
-		AllowOrigins:           getEnvStringSlice("ALLOW_ORIGINS", []string{"http://localhost:5173", "http://localhost:3000", "http://localhost:8000"}),
-		LogLevel:               getEnv("LOG_LEVEL", "INFO"),
+		Host:                    getEnv("HOST", "0.0.0.0"),
+		Port:                    getEnvInt("PORT", 8000),
+		DBHost:                  getEnv("DB_HOST", "localhost"),
+		DBPort:                  getEnv("DB_PORT", "5432"),
+		DBUser:                  getEnv("DB_USER", "wikikeeper"),
+		DBPassword:              getEnv("DB_PASSWORD", "wikikeeper123"),
+		DBName:                  getEnv("DB_NAME", "wikikeeper"),
+		HTTPTimeout:             getEnvFloat("HTTP_TIMEOUT", 30.0),
+		HTTPUserAgent:           getEnv("HTTP_USER_AGENT", "WikiKeeper/0.3.0 (https://wikikeeper.saveweb.org/)"),
+		ProviderRequestInterval: getEnvFloat("PROVIDER_REQUEST_INTERVAL", 0.5),
+		FandomRequestInterval:   getEnvFloat("FANDOM_REQUEST_INTERVAL", 5.0),
+		SiteinfoCheckBatchSize:  getEnvInt("SITEINFO_CHECK_BATCH_SIZE", 100), // Check 100 wikis per cycle
+		ArchiveCheckBatchSize:   getEnvInt("ARCHIVE_CHECK_BATCH_SIZE", 100),  // Check 100 wikis per cycle
+		AdminToken:              getEnv("ADMIN_TOKEN", ""),                   // Empty means no admin protection
+		AllowOrigins:            getEnvStringSlice("ALLOW_ORIGINS", []string{"http://localhost:5173", "http://localhost:3000", "http://localhost:8000"}),
+		LogLevel:                getEnv("LOG_LEVEL", "INFO"),
 	}
 
 	return cfg

@@ -51,17 +51,20 @@ func main() {
 	applogger.Log.Info("database migrations completed")
 
 	// Initialize services
+	providerLimiter := services.NewProviderLimiter(db, cfg)
 	mwService := services.NewMediaWikiService(
 		time.Duration(cfg.HTTPTimeout)*time.Second,
 		cfg.HTTPUserAgent,
+		providerLimiter,
 	)
 	archiveService := services.NewArchiveService(
 		time.Duration(cfg.HTTPTimeout)*time.Second,
 		cfg.HTTPUserAgent,
 	)
+	collectorService := services.NewCollectorService(db, mwService, cfg, providerLimiter)
 
 	// Start siteinfo scheduler
-	siteinfoScheduler := services.NewSiteInfoScheduler(db, mwService, archiveService, cfg)
+	siteinfoScheduler := services.NewSiteInfoScheduler(db, collectorService, archiveService, cfg)
 	ctx := context.Background()
 	siteinfoScheduler.Start(ctx)
 	applogger.Log.Info("siteinfo scheduler started")
@@ -90,14 +93,13 @@ func main() {
 
 	// Initialize handlers with database
 	healthHandler := handlers.NewHealthHandler(cfg)
-	wikiHandler := handlers.NewWikiHandler(db, cfg)
+	wikiHandler := handlers.NewWikiHandler(db, cfg, collectorService)
 	statsHandler := handlers.NewStatsHandler(db, cfg)
-	adminHandler := handlers.NewAdminHandler(db, cfg)
+	adminHandler := handlers.NewAdminHandler(db, cfg, collectorService)
 	authHandler := handlers.NewAuthHandler(cfg)
 	extensionsHandler := handlers.NewExtensionsHandler(db)
 
 	// Initialize page handlers
-	collectorService := services.NewCollectorService(db, mwService, cfg)
 	pagesHandler := pages.NewPages(db, cfg, collectorService, archiveService)
 
 	// Serve static files

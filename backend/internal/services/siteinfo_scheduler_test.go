@@ -23,6 +23,8 @@ func TestRequestGroupUsesRegistrableDomain(t *testing.T) {
 	}{
 		{name: "Fandom subdomain", url: "https://ifmovie.fandom.com", want: "fandom.com"},
 		{name: "another Fandom subdomain", url: "https://starwars.fandom.com/wiki/Main_Page", want: "fandom.com"},
+		{name: "legacy Wikia domain", url: "https://starwars.wikia.com", want: "fandom.com"},
+		{name: "Gamepedia domain", url: "https://example.gamepedia.com", want: "fandom.com"},
 		{name: "multi-part public suffix", url: "https://wiki.example.co.uk", want: "example.co.uk"},
 		{name: "IP address", url: "http://127.0.0.1:8080", want: "127.0.0.1"},
 		{name: "invalid URL", url: "://invalid", want: "default"},
@@ -35,10 +37,10 @@ func TestRequestGroupUsesRegistrableDomain(t *testing.T) {
 	}
 }
 
-func TestProviderGateIsSharedAcrossFandomSubdomains(t *testing.T) {
-	scheduler := NewSiteInfoScheduler(nil, nil, nil, &config.Config{})
-	first, firstGroup := scheduler.providerGateFor("https://first.fandom.com")
-	second, secondGroup := scheduler.providerGateFor("https://second.fandom.com")
+func TestProviderLimiterIsSharedAcrossFandomDomains(t *testing.T) {
+	limiter := NewProviderLimiter(nil, &config.Config{})
+	first, firstGroup := limiter.gateFor("https://first.fandom.com")
+	second, secondGroup := limiter.gateFor("https://second.wikia.com")
 
 	require.Equal(t, "fandom.com", firstGroup)
 	require.Equal(t, firstGroup, secondGroup)
@@ -68,7 +70,15 @@ func TestSchedulerStopsProviderQueueAfterOneRateLimit(t *testing.T) {
 
 	scheduler := NewSiteInfoScheduler(
 		db,
-		NewMediaWikiService(time.Second, "WikiKeeper-Test/1.0"),
+		func() *CollectorService {
+			limiter := newProviderLimiter(nil, 0, 0, time.Now, sleepContext, func(time.Duration) time.Duration { return 0 })
+			return NewCollectorService(
+				db,
+				NewMediaWikiService(time.Second, "WikiKeeper-Test/1.0", limiter),
+				&config.Config{},
+				limiter,
+			)
+		}(),
 		nil,
 		&config.Config{SiteinfoCheckBatchSize: 100},
 	)
@@ -99,10 +109,13 @@ func TestSchedulerStopsProviderQueueAfterOneRateLimit(t *testing.T) {
 	require.Equal(t, 2, deferred)
 }
 
-func TestProviderGateHonorsRetryAfterAndRecovers(t *testing.T) {
+func TestProviderLimiterHonorsRetryAfterAndRecovers(t *testing.T) {
 	now := time.Date(2026, time.July, 31, 5, 0, 0, 0, time.UTC)
 	var sleeps []time.Duration
-	gate := newProviderGateWithClock(
+	limiter := newProviderLimiter(
+		nil,
+		500*time.Millisecond,
+		5*time.Second,
 		func() time.Time { return now },
 		func(_ context.Context, delay time.Duration) error {
 			sleeps = append(sleeps, delay)
@@ -117,33 +130,38 @@ func TestProviderGateHonorsRetryAfterAndRecovers(t *testing.T) {
 		RetryAfter: "60",
 		Body:       "rate limited",
 	}
-	attempted, err := gate.run(context.Background(), func() error { return rateLimitErr })
-	require.True(t, attempted)
+	err := limiter.Run(context.Background(), "https://one.fandom.com", func() error { return rateLimitErr })
+	limitErr, ok := asProviderLimitError(err)
+	require.True(t, ok)
+	require.True(t, limitErr.Attempted)
 	require.ErrorIs(t, err, rateLimitErr)
-	require.Equal(t, gate.nextAllowed, gate.cooldownDeadline())
 
-	attempted, err = gate.run(context.Background(), func() error { return nil })
-	require.False(t, attempted)
+	err = limiter.Run(context.Background(), "https://two.wikia.com", func() error { return nil })
+	limitErr, ok = asProviderLimitError(err)
+	require.True(t, ok)
+	require.False(t, limitErr.Attempted)
 	statusErr, rateLimited := asRateLimitError(err)
 	require.True(t, rateLimited)
 	require.Equal(t, "60", statusErr.RetryAfter)
 
 	now = now.Add(time.Minute)
-	attempted, err = gate.run(context.Background(), func() error { return nil })
-	require.True(t, attempted)
+	err = limiter.Run(context.Background(), "https://one.fandom.com", func() error { return nil })
 	require.NoError(t, err)
-	attempted, err = gate.run(context.Background(), func() error { return nil })
-	require.True(t, attempted)
+	err = limiter.Run(context.Background(), "https://one.fandom.com", func() error { return nil })
 	require.NoError(t, err)
 
-	require.Equal(t, []time.Duration{providerRequestInterval}, sleeps)
+	require.Equal(t, []time.Duration{5 * time.Second}, sleeps)
+	gate, _ := limiter.gateFor("https://one.fandom.com")
 	require.Equal(t, 0, gate.consecutiveRateLimits)
 }
 
-func TestProviderGateUsesExponentialBackoff(t *testing.T) {
+func TestProviderLimiterUsesExponentialBackoff(t *testing.T) {
 	now := time.Date(2026, time.July, 31, 5, 0, 0, 0, time.UTC)
 	var sleeps []time.Duration
-	gate := newProviderGateWithClock(
+	limiter := newProviderLimiter(
+		nil,
+		0,
+		0,
 		func() time.Time { return now },
 		func(_ context.Context, delay time.Duration) error {
 			sleeps = append(sleeps, delay)
@@ -154,38 +172,47 @@ func TestProviderGateUsesExponentialBackoff(t *testing.T) {
 	)
 	rateLimitErr := &HTTPStatusError{StatusCode: http.StatusTooManyRequests}
 
-	attempted, err := gate.run(context.Background(), func() error { return rateLimitErr })
-	require.True(t, attempted)
+	err := limiter.Run(context.Background(), "https://one.fandom.com", func() error { return rateLimitErr })
+	limitErr, ok := asProviderLimitError(err)
+	require.True(t, ok)
+	require.True(t, limitErr.Attempted)
 	require.Error(t, err)
-	attempted, err = gate.run(context.Background(), func() error { return rateLimitErr })
-	require.False(t, attempted)
+	err = limiter.Run(context.Background(), "https://one.fandom.com", func() error { return rateLimitErr })
+	limitErr, ok = asProviderLimitError(err)
+	require.True(t, ok)
+	require.False(t, limitErr.Attempted)
 	require.Error(t, err)
 	now = now.Add(30 * time.Second)
-	attempted, err = gate.run(context.Background(), func() error { return rateLimitErr })
-	require.True(t, attempted)
+	err = limiter.Run(context.Background(), "https://one.fandom.com", func() error { return rateLimitErr })
+	limitErr, ok = asProviderLimitError(err)
+	require.True(t, ok)
+	require.True(t, limitErr.Attempted)
 	require.Error(t, err)
-	attempted, err = gate.run(context.Background(), func() error { return nil })
-	require.False(t, attempted)
+	err = limiter.Run(context.Background(), "https://one.fandom.com", func() error { return nil })
+	limitErr, ok = asProviderLimitError(err)
+	require.True(t, ok)
+	require.False(t, limitErr.Attempted)
 	require.Error(t, err)
 
 	require.Empty(t, sleeps)
+	gate, _ := limiter.gateFor("https://one.fandom.com")
 	require.Equal(t, 2, gate.consecutiveRateLimits)
 	require.Equal(t, now.Add(time.Minute), gate.nextAllowed)
 }
 
-func TestProviderGateWaitIsCancellable(t *testing.T) {
+func TestProviderLimiterWaitIsCancellable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	gate := newProviderGate()
+	limiter := NewProviderLimiter(nil, &config.Config{})
+	gate, _ := limiter.gateFor("https://one.fandom.com")
 	<-gate.token
 
 	called := false
-	attempted, err := gate.run(ctx, func() error {
+	err := limiter.Run(ctx, "https://one.fandom.com", func() error {
 		called = true
 		return nil
 	})
 	require.ErrorIs(t, err, context.Canceled)
-	require.False(t, attempted)
 	require.False(t, called)
 
 	gate.token <- struct{}{}

@@ -87,7 +87,8 @@ func TestDetectSchemeUpgradeUsesHTTPRedirect(t *testing.T) {
 
 			service := NewMediaWikiService(time.Second, "WikiKeeper-Test/1.0")
 			input := server.URL + "/base"
-			got, upgraded := service.detectSchemeUpgrade(context.Background(), input)
+			got, upgraded, err := service.detectSchemeUpgrade(context.Background(), input)
+			require.NoError(t, err)
 			require.Equal(t, tt.wantHTTPS, upgraded)
 			if tt.wantHTTPS {
 				require.Equal(t, "https://"+tt.wantHost+"/base", got)
@@ -101,9 +102,58 @@ func TestDetectSchemeUpgradeUsesHTTPRedirect(t *testing.T) {
 func TestDetectSchemeUpgradeSkipsHTTPSInput(t *testing.T) {
 	service := NewMediaWikiService(time.Second, "WikiKeeper-Test/1.0")
 	input := "https://example.com"
-	got, upgraded := service.detectSchemeUpgrade(context.Background(), input)
+	got, upgraded, err := service.detectSchemeUpgrade(context.Background(), input)
+	require.NoError(t, err)
 	require.False(t, upgraded)
 	require.True(t, strings.HasPrefix(got, "https://"))
+}
+
+func TestMediaWikiRequestsUseProviderLimiter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"query":{}}`))
+	}))
+	defer server.Close()
+
+	now := time.Date(2026, time.July, 31, 16, 0, 0, 0, time.UTC)
+	var sleeps []time.Duration
+	limiter := newProviderLimiter(
+		nil,
+		2*time.Second,
+		5*time.Second,
+		func() time.Time { return now },
+		func(_ context.Context, delay time.Duration) error {
+			sleeps = append(sleeps, delay)
+			now = now.Add(delay)
+			return nil
+		},
+		func(time.Duration) time.Duration { return 0 },
+	)
+	service := NewMediaWikiService(time.Second, "WikiKeeper-Test/1.0", limiter)
+
+	resp, err := service.makeRequest(context.Background(), server.URL+"/api.php?first=1")
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	resp, err = service.makeRequest(context.Background(), server.URL+"/api.php?second=1")
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, []time.Duration{2 * time.Second}, sleeps)
+}
+
+func TestDetectSchemeUpgradePropagatesRateLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "60")
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	limiter := newProviderLimiter(nil, 0, 0, time.Now, sleepContext, func(time.Duration) time.Duration { return 0 })
+	service := NewMediaWikiService(time.Second, "WikiKeeper-Test/1.0", limiter)
+	_, _, err := service.detectSchemeUpgrade(context.Background(), server.URL)
+	require.Error(t, err)
+	limitErr, ok := asProviderLimitError(err)
+	require.True(t, ok)
+	require.True(t, limitErr.Attempted)
 }
 
 func TestInitializePreservesRateLimitFromAPIDetection(t *testing.T) {

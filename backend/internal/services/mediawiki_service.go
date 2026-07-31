@@ -20,6 +20,7 @@ var mediaWikiLog = applogger.With("component", "mediawiki")
 type MediaWikiService struct {
 	timeout   time.Duration
 	userAgent string
+	limiter   *ProviderLimiter
 }
 
 // HTTPStatusError preserves the response status so callers can distinguish
@@ -38,14 +39,18 @@ func (e *HTTPStatusError) Error() string {
 }
 
 // NewMediaWikiService creates a new MediaWiki service instance
-func NewMediaWikiService(timeout time.Duration, userAgent string) *MediaWikiService {
+func NewMediaWikiService(timeout time.Duration, userAgent string, limiters ...*ProviderLimiter) *MediaWikiService {
 	if userAgent == "" {
 		userAgent = "WikiKeeper/1.0"
 	}
-	return &MediaWikiService{
+	service := &MediaWikiService{
 		timeout:   timeout,
 		userAgent: userAgent,
 	}
+	if len(limiters) > 0 {
+		service.limiter = limiters[0]
+	}
+	return service
 }
 
 // MediaWikiClient represents a detected MediaWiki installation
@@ -127,7 +132,10 @@ func (s *MediaWikiService) Initialize(ctx context.Context, wikiURL string) (*Med
 	}
 
 	// Try to detect if the base URL needs scheme upgrade (http -> https)
-	normalizedURL, wasRedirected := s.detectSchemeUpgrade(ctx, normalizedURL)
+	normalizedURL, wasRedirected, err := s.detectSchemeUpgrade(ctx, normalizedURL)
+	if err != nil {
+		return nil, NewMediaWikiError("detect_scheme", normalizedURL, err)
+	}
 
 	// Detect API URL
 	apiURL, indexURL, err := s.detectAPIURL(ctx, normalizedURL)
@@ -247,6 +255,9 @@ func (s *MediaWikiService) detectAPIURL(ctx context.Context, baseURL string) (ap
 	for _, candidate := range candidates {
 		// Check for permanent redirects on the API URL
 		redirectedAPI, hasRedirect, checkErr := s.checkRedirect(ctx, candidate.apiURL)
+		if _, rateLimited := asRateLimitError(checkErr); rateLimited {
+			return "", "", checkErr
+		}
 		if checkErr == nil && hasRedirect {
 			// Check if this is a scheme/host-only redirect (path unchanged)
 			if isSchemeOrHostRedirect(candidate.apiURL, redirectedAPI) {
@@ -255,6 +266,9 @@ func (s *MediaWikiService) detectAPIURL(ctx context.Context, baseURL string) (ap
 				// Test if the redirected URL actually works as a MediaWiki API
 				testURL := redirectedAPI + "?action=query&meta=siteinfo&format=json"
 				resp, testErr := s.makeRequest(ctx, testURL)
+				if _, rateLimited := asRateLimitError(testErr); rateLimited {
+					return "", "", testErr
+				}
 				if testErr == nil {
 					defer resp.Body.Close()
 
@@ -297,6 +311,9 @@ func (s *MediaWikiService) detectAPIURL(ctx context.Context, baseURL string) (ap
 		testURL := candidate.apiURL + "?action=query&meta=siteinfo&format=json"
 		resp, err := s.makeRequest(ctx, testURL)
 		if err != nil {
+			if _, rateLimited := asRateLimitError(err); rateLimited {
+				return "", "", err
+			}
 			lastErr = err
 			continue
 		}
@@ -361,7 +378,7 @@ func (s *MediaWikiService) checkRedirect(ctx context.Context, url string) (strin
 		},
 	}
 
-	resp, err := client.Do(req)
+	resp, err := s.execute(ctx, url, func() (*http.Response, error) { return client.Do(req) })
 	if err != nil {
 		return "", false, err
 	}
@@ -381,10 +398,10 @@ func (s *MediaWikiService) checkRedirect(ctx context.Context, url string) (strin
 
 // detectSchemeUpgrade checks if the URL should be upgraded from http to https
 // Returns the normalized URL and whether a redirect occurred
-func (s *MediaWikiService) detectSchemeUpgrade(ctx context.Context, rawURL string) (string, bool) {
+func (s *MediaWikiService) detectSchemeUpgrade(ctx context.Context, rawURL string) (string, bool, error) {
 	// Only check http URLs
 	if !strings.HasPrefix(rawURL, "http://") {
-		return rawURL, false
+		return rawURL, false, nil
 	}
 
 	// Inspect the HTTP endpoint's redirect without following it. The HTTPS
@@ -393,7 +410,7 @@ func (s *MediaWikiService) detectSchemeUpgrade(ctx context.Context, rawURL strin
 	testURL := strings.TrimSuffix(rawURL, "/") + "/"
 	req, err := http.NewRequestWithContext(ctx, "HEAD", testURL, nil)
 	if err != nil {
-		return rawURL, false
+		return rawURL, false, nil
 	}
 
 	req.Header.Set("User-Agent", s.userAgent)
@@ -404,29 +421,32 @@ func (s *MediaWikiService) detectSchemeUpgrade(ctx context.Context, rawURL strin
 			return http.ErrUseLastResponse
 		},
 	}
-	resp, err := client.Do(req)
+	resp, err := s.execute(ctx, testURL, func() (*http.Response, error) { return client.Do(req) })
 	if err != nil {
-		return rawURL, false
+		if _, rateLimited := asRateLimitError(err); rateLimited {
+			return rawURL, false, err
+		}
+		return rawURL, false, nil
 	}
 	defer resp.Body.Close()
 
 	if !isRedirectStatus(resp.StatusCode) {
-		return rawURL, false
+		return rawURL, false, nil
 	}
 	location, err := resp.Location()
 	if err != nil || location.Scheme != "https" {
-		return rawURL, false
+		return rawURL, false, nil
 	}
 
 	original, err := url.Parse(rawURL)
 	if err != nil {
-		return rawURL, false
+		return rawURL, false, nil
 	}
 	original.Scheme = "https"
 	original.Host = location.Host
 	httpsURL := original.String()
 	mediaWikiLog.Info("Scheme upgrade", "url", rawURL, "https_url", httpsURL)
-	return httpsURL, true
+	return httpsURL, true, nil
 }
 
 func isRedirectStatus(status int) bool {
@@ -470,7 +490,7 @@ func (s *MediaWikiService) makeRequest(ctx context.Context, url string) (*http.R
 	req.Header.Set("Accept", "application/json")
 
 	client := &http.Client{Timeout: s.timeout}
-	resp, err := client.Do(req)
+	resp, err := s.execute(ctx, url, func() (*http.Response, error) { return client.Do(req) })
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -496,6 +516,53 @@ func (s *MediaWikiService) makeRequest(ctx context.Context, url string) (*http.R
 	}
 
 	return resp, nil
+}
+
+func (s *MediaWikiService) execute(
+	ctx context.Context,
+	rawURL string,
+	request func() (*http.Response, error),
+) (*http.Response, error) {
+	var resp *http.Response
+	perform := func() error {
+		var err error
+		resp, err = request()
+		if err != nil {
+			return err
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			return responseStatusError(resp)
+		}
+		return nil
+	}
+
+	var err error
+	if s.limiter == nil {
+		err = perform()
+	} else {
+		err = s.limiter.Run(ctx, rawURL, perform)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func responseStatusError(resp *http.Response) *HTTPStatusError {
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	bodyStr := string(body)
+	if len(bodyStr) > 120 {
+		bodyStr = bodyStr[:120] + "..."
+	}
+	bodyStr = strings.ReplaceAll(bodyStr, "\n", " ")
+	bodyStr = strings.ReplaceAll(bodyStr, "\r", " ")
+	bodyStr = strings.TrimSpace(bodyStr)
+	return &HTTPStatusError{
+		StatusCode: resp.StatusCode,
+		RetryAfter: resp.Header.Get("Retry-After"),
+		Body:       bodyStr,
+	}
 }
 
 // parseSiteInfoGeneral parses general site information from API response

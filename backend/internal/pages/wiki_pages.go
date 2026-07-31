@@ -205,15 +205,14 @@ func (p *Pages) TriggerCheck(c echo.Context) error {
 			return c.HTML(http.StatusTooManyRequests, `<span class="text-yellow-600 text-sm">Rate limited, try again later</span>`)
 		}
 	}
+	if retryAt, limited := p.collectorService.ProviderCooldown(ctx, wiki.URL); limited {
+		retryAfter := time.Until(retryAt).Round(time.Second)
+		return c.HTML(http.StatusTooManyRequests, `<span class="text-yellow-600 text-sm">Provider rate limited; retry in `+retryAfter.String()+`</span>`)
+	}
 
 	go func() {
 		bgCtx := context.Background()
-		mwService := services.NewMediaWikiService(
-			time.Duration(p.cfg.HTTPTimeout)*time.Second,
-			p.cfg.HTTPUserAgent,
-		)
-		collector := services.NewCollectorService(p.db, mwService, p.cfg)
-		_ = collector.CollectSingleWiki(bgCtx, id)
+		_ = p.collectorService.CollectSingleWiki(bgCtx, id)
 	}()
 
 	return c.HTML(http.StatusAccepted, `<span class="text-green-600 text-sm">Check started. <a href="/wikis/`+id.String()+`" class="underline">Refresh</a> in ~30s.</span>`)

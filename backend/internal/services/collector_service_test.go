@@ -108,6 +108,44 @@ func TestCollectorDoesNotRedetectKnownAPIOnRateLimit(t *testing.T) {
 	require.Contains(t, *updated.LastError, "HTTP 429")
 }
 
+func TestSharedCollectorBlocksManualCheckDuringProviderCooldown(t *testing.T) {
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Retry-After", "60")
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	db := setupCollectorTestDB(t)
+	apiURL := server.URL + "/api.php"
+	indexURL := server.URL + "/index.php"
+	wikis := []*models.Wiki{
+		{ID: uuid.New(), URL: "https://one.fandom.com", APIURL: &apiURL, IndexURL: &indexURL, Status: models.WikiStatusOK, CollectionStatus: models.CollectionStatusOK, APIAvailable: true, IsActive: true},
+		{ID: uuid.New(), URL: "https://two.fandom.com", APIURL: &apiURL, IndexURL: &indexURL, Status: models.WikiStatusOK, CollectionStatus: models.CollectionStatusOK, APIAvailable: true, IsActive: true},
+	}
+	for _, wiki := range wikis {
+		require.NoError(t, db.Create(wiki).Error)
+	}
+
+	limiter := newProviderLimiter(nil, 0, 0, time.Now, sleepContext, func(time.Duration) time.Duration { return 0 })
+	collector := NewCollectorService(
+		db,
+		NewMediaWikiService(time.Second, "WikiKeeper-Test/1.0", limiter),
+		&config.Config{},
+		limiter,
+	)
+	require.Error(t, collector.CollectSingleWiki(context.Background(), wikis[0].ID))
+	require.Error(t, collector.CollectSingleWiki(context.Background(), wikis[1].ID))
+	require.EqualValues(t, 1, requests.Load())
+
+	var deferred models.Wiki
+	require.NoError(t, db.First(&deferred, "id = ?", wikis[1].ID).Error)
+	require.Equal(t, models.CollectionStatusOK, deferred.CollectionStatus)
+	require.Nil(t, deferred.LastCheckAt)
+	require.Nil(t, deferred.LastError)
+}
+
 func TestRateLimitKeepsNeverVerifiedWikiPending(t *testing.T) {
 	db := setupCollectorTestDB(t)
 	wiki := &models.Wiki{

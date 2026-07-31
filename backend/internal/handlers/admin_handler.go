@@ -18,13 +18,14 @@ import (
 
 // AdminHandler handles admin-only requests
 type AdminHandler struct {
-	db     *gorm.DB
-	config *config.Config
+	db        *gorm.DB
+	config    *config.Config
+	collector *services.CollectorService
 }
 
 // NewAdminHandler creates a new admin handler
-func NewAdminHandler(db *gorm.DB, cfg *config.Config) *AdminHandler {
-	return &AdminHandler{db: db, config: cfg}
+func NewAdminHandler(db *gorm.DB, cfg *config.Config, collector *services.CollectorService) *AdminHandler {
+	return &AdminHandler{db: db, config: cfg, collector: collector}
 }
 
 // DeleteWiki handles DELETE /api/admin/wikis/:id
@@ -79,12 +80,6 @@ func (h *AdminHandler) CollectAll(c echo.Context) error {
 
 		applogger.Log.Info("[Admin] Starting collection for wikis", "count", len(wikis), "total", total)
 
-		mwService := services.NewMediaWikiService(
-			time.Duration(h.config.HTTPTimeout)*time.Second,
-			h.config.HTTPUserAgent,
-		)
-		collector := services.NewCollectorService(h.db, mwService, h.config)
-
 		successCount := 0
 		errorCount := 0
 
@@ -95,7 +90,7 @@ func (h *AdminHandler) CollectAll(c echo.Context) error {
 
 			applogger.Log.Info("[Admin] Collecting wiki", "index", i+1, "total", len(wikis), "url", wiki.URL)
 
-			if err := collector.CollectSingleWiki(ctx, wiki.ID); err != nil {
+			if err := h.collector.CollectSingleWiki(ctx, wiki.ID); err != nil {
 				applogger.Log.Info("[Admin] Failed to collect wiki", "wiki_id", wiki.ID, "err", err)
 				errorCount++
 			} else {

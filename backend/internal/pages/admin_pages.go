@@ -3,13 +3,11 @@ package pages
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 
 	"wikikeeper-backend/internal/repository"
-	"wikikeeper-backend/internal/services"
 )
 
 func (p *Pages) AdminDeleteWiki(c echo.Context) error {
@@ -30,12 +28,7 @@ func (p *Pages) AdminDeleteWiki(c echo.Context) error {
 func (p *Pages) AdminCollectAll(c echo.Context) error {
 	go func() {
 		bgCtx := context.Background()
-		mwService := services.NewMediaWikiService(
-			time.Duration(p.cfg.HTTPTimeout)*time.Second,
-			p.cfg.HTTPUserAgent,
-		)
-		collector := services.NewCollectorService(p.db, mwService, p.cfg)
-		_, _ = collector.CollectBatch(bgCtx, 10000, 1*time.Second)
+		_, _ = p.collectorService.CollectBatch(bgCtx, 10000, 0)
 	}()
 
 	return c.HTML(http.StatusAccepted, `<span class="text-green-600 text-sm">Collection started for all wikis</span>`)

@@ -2,14 +2,11 @@ package services
 
 import (
 	"context"
-	"net/url"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/net/publicsuffix"
 	"gorm.io/gorm"
 
 	"wikikeeper-backend/internal/config"
@@ -21,26 +18,10 @@ import (
 
 var siteinfoSchedulerLog = applogger.With("component", "siteinfo-scheduler")
 
-func requestGroup(rawURL string) string {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return "default"
-	}
-
-	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
-	if host == "" {
-		return "default"
-	}
-	if domain, err := publicsuffix.EffectiveTLDPlusOne(host); err == nil {
-		return domain
-	}
-	return host
-}
-
 // SiteInfoScheduler manages periodic wiki siteinfo collection
 type SiteInfoScheduler struct {
 	db             *gorm.DB
-	mwService      *MediaWikiService
+	collector      *CollectorService
 	archiveService *ArchiveService
 	config         *config.Config
 	stopCh         chan struct{}
@@ -48,33 +29,18 @@ type SiteInfoScheduler struct {
 	mu             sync.Mutex
 	cancel         context.CancelFunc
 	running        bool
-	providerMu     sync.Mutex
-	providerGates  map[string]*providerGate
 }
 
 // NewSiteInfoScheduler creates a new siteinfo scheduler instance
-func NewSiteInfoScheduler(db *gorm.DB, mwService *MediaWikiService, archiveService *ArchiveService, cfg *config.Config) *SiteInfoScheduler {
+func NewSiteInfoScheduler(db *gorm.DB, collector *CollectorService, archiveService *ArchiveService, cfg *config.Config) *SiteInfoScheduler {
 	return &SiteInfoScheduler{
 		db:             db,
-		mwService:      mwService,
+		collector:      collector,
 		archiveService: archiveService,
 		config:         cfg,
 		stopCh:         make(chan struct{}),
 		running:        false,
-		providerGates:  make(map[string]*providerGate),
 	}
-}
-
-func (s *SiteInfoScheduler) providerGateFor(rawURL string) (*providerGate, string) {
-	group := requestGroup(rawURL)
-	s.providerMu.Lock()
-	defer s.providerMu.Unlock()
-	if gate, ok := s.providerGates[group]; ok {
-		return gate, group
-	}
-	gate := newProviderGate()
-	s.providerGates[group] = gate
-	return gate, group
 }
 
 // Start begins periodic collection
@@ -176,7 +142,6 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 	var errorCount atomic.Int64
 	var deferredCount atomic.Int64
 
-	collector := NewCollectorService(s.db, s.mwService, s.config)
 	type queuedWiki struct {
 		wiki  *models.Wiki
 		index int
@@ -197,21 +162,24 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			gate, _ := s.providerGateFor(queue[0].wiki.URL)
 			for position, item := range queue {
 				if ctx.Err() != nil {
 					return
 				}
 
-				attempted, err := gate.run(ctx, func() error {
-					siteinfoSchedulerLog.Info("processing wiki", "index", item.index+1, "total", totalWikis, "url", item.wiki.URL, "request_group", group)
-					return collector.CollectSingleWiki(ctx, item.wiki.ID)
-				})
+				siteinfoSchedulerLog.Info("processing wiki", "index", item.index+1, "total", totalWikis, "url", item.wiki.URL, "request_group", group)
+				err := s.collector.CollectSingleWiki(ctx, item.wiki.ID)
 				if err != nil {
 					if ctx.Err() != nil {
 						return
 					}
 					if _, rateLimited := asRateLimitError(err); rateLimited {
+						attempted := true
+						retryAt := time.Time{}
+						if limitErr, ok := asProviderLimitError(err); ok {
+							attempted = limitErr.Attempted
+							retryAt = limitErr.RetryAt
+						}
 						start := position
 						if attempted {
 							errorCount.Add(1)
@@ -223,7 +191,6 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 						for _, remaining := range queue[start:] {
 							remainingIDs = append(remainingIDs, remaining.wiki.ID)
 						}
-						retryAt := gate.cooldownDeadline()
 						if len(remainingIDs) > 0 && !retryAt.IsZero() {
 							if deferErr := wikiRepo.DeferCollectionChecks(ctx, remainingIDs, retryAt); deferErr != nil {
 								siteinfoSchedulerLog.Error("failed to defer provider queue", "request_group", group, "count", len(remainingIDs), "error", deferErr)
@@ -265,6 +232,16 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 // periodicRun runs collection continuously with backoff based on last_check_at
 func (s *SiteInfoScheduler) periodicRun(ctx context.Context) {
 	defer s.wg.Done()
+	if s.config.SiteinfoCheckBatchSize <= 0 {
+		siteinfoSchedulerLog.Info("siteinfo collection disabled", "batch_size", s.config.SiteinfoCheckBatchSize)
+		select {
+		case <-s.stopCh:
+			siteinfoSchedulerLog.Info("periodic run stopped")
+		case <-ctx.Done():
+			siteinfoSchedulerLog.Info("context cancelled")
+		}
+		return
+	}
 
 	ticker := time.NewTimer(time.Second)
 	for {

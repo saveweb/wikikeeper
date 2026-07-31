@@ -22,13 +22,14 @@ import (
 
 // WikiHandler handles wiki HTTP requests
 type WikiHandler struct {
-	db     *gorm.DB
-	config *config.Config
+	db        *gorm.DB
+	config    *config.Config
+	collector *services.CollectorService
 }
 
 // NewWikiHandler creates a new wiki handler
-func NewWikiHandler(db *gorm.DB, cfg *config.Config) *WikiHandler {
-	return &WikiHandler{db: db, config: cfg}
+func NewWikiHandler(db *gorm.DB, cfg *config.Config, collector *services.CollectorService) *WikiHandler {
+	return &WikiHandler{db: db, config: cfg, collector: collector}
 }
 
 // ListWikisRequest represents query parameters for listing wikis
@@ -252,17 +253,17 @@ func (h *WikiHandler) TriggerCheck(c echo.Context) error {
 			}
 		}
 	}
+	if retryAt, limited := h.collector.ProviderCooldown(ctx, wiki.URL); limited {
+		return c.JSON(http.StatusTooManyRequests, map[string]string{
+			"detail":      "Provider rate limited",
+			"retry_after": fmt.Sprintf("%.0f", time.Until(retryAt).Seconds()),
+		})
+	}
 
 	// Start background collection
 	go func() {
 		bgCtx := context.Background()
-		mwService := services.NewMediaWikiService(
-			time.Duration(h.config.HTTPTimeout)*time.Second,
-			h.config.HTTPUserAgent,
-		)
-		collector := services.NewCollectorService(h.db, mwService, h.config)
-
-		if err := collector.CollectSingleWiki(bgCtx, id); err != nil {
+		if err := h.collector.CollectSingleWiki(bgCtx, id); err != nil {
 			applogger.Log.Info("[Handler] Collection failed for wiki", "wiki_id", id, "err", err)
 		}
 	}()

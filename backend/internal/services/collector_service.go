@@ -39,15 +39,27 @@ type CollectorService struct {
 	db        *gorm.DB
 	mwService *MediaWikiService
 	config    *config.Config
+	limiter   *ProviderLimiter
 }
 
 // NewCollectorService creates a new collector service instance
-func NewCollectorService(db *gorm.DB, mwService *MediaWikiService, cfg *config.Config) *CollectorService {
-	return &CollectorService{
+func NewCollectorService(db *gorm.DB, mwService *MediaWikiService, cfg *config.Config, limiters ...*ProviderLimiter) *CollectorService {
+	service := &CollectorService{
 		db:        db,
 		mwService: mwService,
 		config:    cfg,
 	}
+	if len(limiters) > 0 {
+		service.limiter = limiters[0]
+	}
+	return service
+}
+
+func (s *CollectorService) ProviderCooldown(ctx context.Context, rawURL string) (time.Time, bool) {
+	if s.limiter == nil {
+		return time.Time{}, false
+	}
+	return s.limiter.Cooldown(ctx, rawURL)
 }
 
 // CollectSingleWiki collects stats for a single wiki
@@ -63,9 +75,26 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 		}
 		return NewCollectorError("get_wiki", err)
 	}
+	return s.collectWiki(ctx, wiki)
+}
 
+func (s *CollectorService) recordCollectionError(ctx context.Context, wikiID uuid.UUID, op string, err error) error {
+	if limitErr, ok := asProviderLimitError(err); ok && !limitErr.Attempted {
+		return NewCollectorError(op, err)
+	}
+	if _, rateLimited := asRateLimitError(err); rateLimited {
+		s.UpdateWikiRateLimit(ctx, wikiID, err)
+	} else {
+		s.UpdateWikiCollectionFailure(ctx, wikiID, err)
+	}
+	return NewCollectorError(op, err)
+}
+
+func (s *CollectorService) collectWiki(ctx context.Context, wiki *models.Wiki) error {
 	var client *MediaWikiClient
 	var siteinfo *SiteInfo
+	var err error
+	wikiRepo := repository.NewWikiRepository(s.db)
 
 	// If API URL exists, try using it directly first
 	if wiki.APIURL != nil && wiki.IndexURL != nil {
@@ -78,34 +107,29 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 		// If fetch failed with existing API, try re-detecting
 		if err != nil {
 			if _, rateLimited := asRateLimitError(err); rateLimited {
-				s.UpdateWikiRateLimit(ctx, wikiID, err)
-				return NewCollectorError("fetch_siteinfo", err)
+				return s.recordCollectionError(ctx, wiki.ID, "fetch_siteinfo", err)
 			}
 
 			collectorLog.Info("Existing API failed, re-detecting", "err", err)
 			client, err = s.mwService.Initialize(ctx, wiki.URL)
 			if err != nil {
-				s.UpdateWikiCollectionFailure(ctx, wikiID, err)
-				return NewCollectorError("initialize_mediawiki", err)
+				return s.recordCollectionError(ctx, wiki.ID, "initialize_mediawiki", err)
 			}
 			siteinfo, err = s.mwService.FetchSiteinfo(ctx, client)
 			if err != nil {
-				s.UpdateWikiCollectionFailure(ctx, wikiID, err)
-				return NewCollectorError("fetch_siteinfo", err)
+				return s.recordCollectionError(ctx, wiki.ID, "fetch_siteinfo", err)
 			}
 		}
 	} else {
 		// No existing API URL, need to detect
 		client, err = s.mwService.Initialize(ctx, wiki.URL)
 		if err != nil {
-			s.UpdateWikiCollectionFailure(ctx, wikiID, err)
-			return NewCollectorError("initialize_mediawiki", err)
+			return s.recordCollectionError(ctx, wiki.ID, "initialize_mediawiki", err)
 		}
 
 		siteinfo, err = s.mwService.FetchSiteinfo(ctx, client)
 		if err != nil {
-			s.UpdateWikiCollectionFailure(ctx, wikiID, err)
-			return NewCollectorError("fetch_siteinfo", err)
+			return s.recordCollectionError(ctx, wiki.ID, "fetch_siteinfo", err)
 		}
 	}
 
@@ -126,7 +150,7 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 		if removed, err := s.HandleDuplicateAPIURL(ctx, wiki, *client.APIURL); err != nil {
 			collectorLog.Info("Warning: duplicate check failed", "err", err)
 		} else if removed {
-			collectorLog.Info("Wiki deleted as duplicate", "wiki_id", wikiID)
+			collectorLog.Info("Wiki deleted as duplicate", "wiki_id", wiki.ID)
 			return NewCollectorError("duplicate_check", ErrWikiDeleted)
 		}
 	}
@@ -141,7 +165,7 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 	responseTime := siteinfo.ResponseTime
 	httpStatus := siteinfo.HTTPStatus
 	stats := &models.WikiStats{
-		WikiID:         wikiID,
+		WikiID:         wiki.ID,
 		Time:           now,
 		Pages:          siteinfo.Statistics.Pages,
 		Articles:       siteinfo.Statistics.Articles,
@@ -163,7 +187,7 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 	extensionsRepo := repository.NewExtensionsRepository(s.db)
 
 	// Get latest snapshot for comparison
-	lastSnapshot, err := extensionsRepo.GetLatestSnapshot(ctx, wikiID)
+	lastSnapshot, err := extensionsRepo.GetLatestSnapshot(ctx, wiki.ID)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		collectorLog.Info("Failed to get last extensions snapshot", "err", err)
 		// Continue anyway, we'll create a new snapshot
@@ -177,7 +201,7 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 
 		// Close old snapshot if exists
 		if lastSnapshot != nil {
-			if err := extensionsRepo.CloseLatestSnapshot(ctx, wikiID, now); err != nil {
+			if err := extensionsRepo.CloseLatestSnapshot(ctx, wiki.ID, now); err != nil {
 				collectorLog.Info("Failed to close last snapshot", "err", err)
 			}
 		}
@@ -185,7 +209,7 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 		// Create new snapshot
 		items := flattenExtensions(&siteinfo.Extensions)
 		snapshot := &models.WikiExtensionsSnapshot{
-			WikiID:           wikiID,
+			WikiID:           wiki.ID,
 			SnapshotAt:       now,
 			ValidUntil:       nil,
 			MediaWikiVersion: &siteinfo.General.Generator,
@@ -196,7 +220,7 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 			collectorLog.Info("Failed to create extensions snapshot", "err", err)
 		} else {
 			collectorLog.Info("Extensions snapshot created",
-				"wiki_id", wikiID,
+				"wiki_id", wiki.ID,
 				"extensions", len(siteinfo.Extensions.Extensions),
 				"skins", len(siteinfo.Extensions.Skins),
 				"added", len(diff.Added),
@@ -207,7 +231,7 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 	// If no changes, we don't need to update anything (snapshot remains valid)
 
 	collectorLog.Info("Collection completed",
-		"wiki_id", wikiID, "pages", siteinfo.Statistics.Pages, "edits", siteinfo.Statistics.Edits)
+		"wiki_id", wiki.ID, "pages", siteinfo.Statistics.Pages, "edits", siteinfo.Statistics.Edits)
 
 	return nil
 }
