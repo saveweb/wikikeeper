@@ -51,7 +51,12 @@ func (r *ExtensionsRepository) GetSnapshotsInTimeRange(ctx context.Context, wiki
 	var snapshots []*models.WikiExtensionsSnapshot
 	err := r.db.WithContext(ctx).
 		Preload("Items").
-		Where("wiki_id = ? AND snapshot_at >= ? AND snapshot_at <= ?", wikiID, from, to).
+		Where(
+			"wiki_id = ? AND snapshot_at <= ? AND (valid_until IS NULL OR valid_until >= ?)",
+			wikiID,
+			to,
+			from,
+		).
 		Order("snapshot_at DESC").
 		Find(&snapshots).Error
 	if err != nil {
@@ -94,12 +99,12 @@ func (r *ExtensionsRepository) GetAllSnapshots(ctx context.Context, wikiID uuid.
 
 // ExtensionWikiInfo contains wiki and extension information
 type ExtensionWikiInfo struct {
-	WikiID           uuid.UUID  `json:"wiki_id"`
-	WikiName         *string    `json:"wiki_name,omitempty"`
-	Sitename         *string    `json:"sitename,omitempty"`
-	URL              string     `json:"url"`
-	SnapshotAt       time.Time  `json:"snapshot_at"`
-	ExtensionVersion *string    `json:"version,omitempty"`
+	WikiID           uuid.UUID `json:"wiki_id"`
+	WikiName         *string   `json:"wiki_name,omitempty"`
+	Sitename         *string   `json:"sitename,omitempty"`
+	URL              string    `json:"url"`
+	SnapshotAt       time.Time `json:"snapshot_at"`
+	ExtensionVersion *string   `json:"version,omitempty"`
 }
 
 // ExtensionWikisListOptions pagination options for listing wikis

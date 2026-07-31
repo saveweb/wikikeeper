@@ -167,10 +167,10 @@ func CompareExtensionsFromSnapshot(oldSnapshot *models.WikiExtensionsSnapshot, n
 
 	for _, item := range oldSnapshot.Items {
 		info := ExtensionInfo{
-			Type:       item.ExtType,
-			Name:       item.Name,
-			URL:        item.URL,
-			Version:    item.Version,
+			Type:        item.ExtType,
+			Name:        item.Name,
+			URL:         item.URL,
+			Version:     item.Version,
 			LicenseName: item.LicenseName,
 		}
 
@@ -182,4 +182,15 @@ func CompareExtensionsFromSnapshot(oldSnapshot *models.WikiExtensionsSnapshot, n
 	}
 
 	return CompareExtensions(oldExtensions, new)
+}
+
+func extensionSnapshotVersionChanged(snapshot *models.WikiExtensionsSnapshot, version string) bool {
+	if snapshot == nil {
+		return false
+	}
+	return snapshot.MediaWikiVersion == nil || *snapshot.MediaWikiVersion != version
+}
+
+func extensionSnapshotNeedsUpdate(snapshot *models.WikiExtensionsSnapshot, version string, diff *ExtensionsDiff) bool {
+	return snapshot == nil || diff.HasChanges || extensionSnapshotVersionChanged(snapshot, version)
 }

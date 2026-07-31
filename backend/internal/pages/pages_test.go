@@ -206,3 +206,52 @@ func TestWikiDetailRendersErrorsForPublicViewer(t *testing.T) {
 	require.Contains(t, body, `&lt;script&gt;alert(&#34;not executable&#34;)&lt;/script&gt;`)
 	require.NotContains(t, body, `<script>alert("not executable")</script>`)
 }
+
+func TestWikiDetailRendersExtensionSnapshotHistory(t *testing.T) {
+	currentVersion := "MediaWiki 1.46.0"
+	oldVersion := "MediaWiki 1.45.1"
+	currentAt := time.Date(2026, time.July, 31, 12, 0, 0, 0, time.UTC)
+	oldAt := currentAt.AddDate(0, -2, 0)
+	oldUntil := currentAt
+	current := &models.WikiExtensionsSnapshot{
+		ID:               uuid.New(),
+		SnapshotAt:       currentAt,
+		MediaWikiVersion: &currentVersion,
+		Items:            []models.WikiExtensionItem{{Name: "VisualEditor"}},
+	}
+	old := &models.WikiExtensionsSnapshot{
+		ID:               uuid.New(),
+		SnapshotAt:       oldAt,
+		ValidUntil:       &oldUntil,
+		MediaWikiVersion: &oldVersion,
+		Items:            []models.WikiExtensionItem{{Name: "WikiEditor"}},
+	}
+
+	p := &Pages{
+		cfg:         &config.Config{LogLevel: "INFO"},
+		templateDir: "../../web/templates",
+	}
+	p.baseTemplates = p.parseBaseTemplates()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/wikis/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, p.render(c, "wiki_detail.html", M{
+		"Wiki":             &models.Wiki{ID: uuid.New(), URL: "https://example.org", Status: models.WikiStatusOK},
+		"Extensions":       current,
+		"ExtensionHistory": []*models.WikiExtensionsSnapshot{current, old},
+	}))
+
+	body := rec.Body.String()
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, body, "Extensions History")
+	require.Contains(t, body, "Snapshot 2026-07-31 12:00")
+	require.Contains(t, body, "MediaWiki 1.46.0")
+	require.Contains(t, body, "MediaWiki 1.45.1")
+	require.Contains(t, body, "Current")
+	require.Contains(t, body, "Until 2026-07-31 12:00")
+	require.Contains(t, body, "VisualEditor")
+	require.Contains(t, body, "WikiEditor")
+}

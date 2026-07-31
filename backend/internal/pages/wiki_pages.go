@@ -177,6 +177,11 @@ func (p *Pages) WikiDetail(c echo.Context) error {
 	if err == nil && extSnapshot != nil {
 		data["Extensions"] = extSnapshot
 	}
+	now := time.Now()
+	extensionHistory, err := extRepo.GetSnapshotsInTimeRange(ctx, id, now.AddDate(-1, 0, 0), now)
+	if err == nil && len(extensionHistory) > 1 {
+		data["ExtensionHistory"] = extensionHistory
+	}
 
 	archiveRepo := repository.NewArchiveRepository(p.db)
 	archives, err := archiveRepo.GetByWikiID(ctx, id)

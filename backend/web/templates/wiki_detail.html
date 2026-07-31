@@ -160,9 +160,10 @@
             <h2 class="text-sm font-semibold text-gray-700">
                 Extensions ({{len .Items}})
             </h2>
-            {{if .MediaWikiVersion}}<span class="text-xs text-gray-400"
-                >MW {{.MediaWikiVersion}}</span
-            >{{end}}
+            <div class="text-right text-xs text-gray-400">
+                <div>Snapshot {{formatDate .SnapshotAt}}</div>
+                {{if .MediaWikiVersion}}<div>{{.MediaWikiVersion}}</div>{{end}}
+            </div>
         </div>
         <div class="flex flex-wrap gap-1.5">
             {{range .Items}}
@@ -174,6 +175,55 @@
                     >{{truncate (toa .Version) 10}}</span
                 >{{end}}
             </a>
+            {{end}}
+        </div>
+    </div>
+    {{end}} {{with .ExtensionHistory}}
+    <div
+        class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
+    >
+        <div class="px-4 py-3 border-b border-gray-200">
+            <h2 class="text-sm font-semibold text-gray-700">
+                Extensions History
+            </h2>
+        </div>
+        <div class="divide-y divide-gray-200">
+            {{range .}}
+            <details class="group px-4 py-3">
+                <summary
+                    class="flex cursor-pointer list-none items-center justify-between gap-4"
+                >
+                    <div class="min-w-0">
+                        <span class="text-sm font-medium text-gray-900"
+                            >{{formatDate .SnapshotAt}}</span
+                        >
+                        {{if .ValidUntil}}<span
+                            class="ml-2 text-xs text-gray-500"
+                            >Until {{formatDate .ValidUntil}}</span
+                        >{{else}}<span class="ml-2 text-xs text-green-700"
+                            >Current</span
+                        >{{end}}
+                    </div>
+                    <div class="shrink-0 text-right text-xs text-gray-500">
+                        <div>{{len .Items}} extensions</div>
+                        {{if .MediaWikiVersion}}<div>
+                            {{.MediaWikiVersion}}
+                        </div>{{end}}
+                    </div>
+                </summary>
+                <div class="mt-3 flex flex-wrap gap-1.5">
+                    {{range .Items}}
+                    <span
+                        class="inline-flex items-center px-2 py-1 rounded text-xs bg-gray-100 text-gray-700"
+                    >
+                        {{.Name}}{{if .Version}}
+                        <span class="ml-1 text-gray-400"
+                            >{{truncate (toa .Version) 10}}</span
+                        >{{end}}
+                    </span>
+                    {{end}}
+                </div>
+            </details>
             {{end}}
         </div>
     </div>

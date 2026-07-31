@@ -99,6 +99,9 @@ func (h *ExtensionsHandler) GetExtensionsHistory(c echo.Context) error {
 	if !toSet {
 		to = time.Now()
 	}
+	if from.After(to) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"detail": "from time must not be after to time"})
+	}
 
 	wikiRepo := repository.NewWikiRepository(h.db)
 	extensionsRepo := repository.NewExtensionsRepository(h.db)

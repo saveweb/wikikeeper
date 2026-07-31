@@ -195,9 +195,10 @@ func (s *CollectorService) collectWiki(ctx context.Context, wiki *models.Wiki) e
 
 	// Compare extensions
 	diff := CompareExtensionsFromSnapshot(lastSnapshot, &siteinfo.Extensions)
+	versionChanged := extensionSnapshotVersionChanged(lastSnapshot, siteinfo.General.Generator)
 
-	if diff.HasChanges || lastSnapshot == nil {
-		// Extensions changed or first collection, create new snapshot
+	if extensionSnapshotNeedsUpdate(lastSnapshot, siteinfo.General.Generator, diff) {
+		// Extensions or MediaWiki changed, or this is the first collection.
 
 		// Close old snapshot if exists
 		if lastSnapshot != nil {
@@ -225,10 +226,11 @@ func (s *CollectorService) collectWiki(ctx context.Context, wiki *models.Wiki) e
 				"skins", len(siteinfo.Extensions.Skins),
 				"added", len(diff.Added),
 				"removed", len(diff.Removed),
-				"modified", len(diff.Modified))
+				"modified", len(diff.Modified),
+				"mediawiki_version_changed", versionChanged)
 		}
 	}
-	// If no changes, we don't need to update anything (snapshot remains valid)
+	// If no changes, the current snapshot remains valid.
 
 	collectorLog.Info("Collection completed",
 		"wiki_id", wiki.ID, "pages", siteinfo.Statistics.Pages, "edits", siteinfo.Statistics.Edits)
