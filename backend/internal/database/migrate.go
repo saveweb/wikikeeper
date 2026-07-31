@@ -54,6 +54,10 @@ var migrations = []Migration{
 		Version: 8,
 		Name:    "add_provider_rate_limits",
 	},
+	{
+		Version: 9,
+		Name:    "reset_stale_rate_limits",
+	},
 }
 
 // RunMigrations executes all pending migrations

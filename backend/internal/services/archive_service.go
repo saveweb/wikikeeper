@@ -199,20 +199,8 @@ func (s *ArchiveService) CollectArchives(ctx context.Context, db *gorm.DB, wikiI
 // updateWikiArchiveStatus updates the has_archive field for a wiki
 func (s *ArchiveService) updateWikiArchiveStatus(ctx context.Context, db *gorm.DB, wikiID uuid.UUID, hasArchive bool) {
 	wikiRepo := repository.NewWikiRepository(db)
-	wiki, err := wikiRepo.GetByID(ctx, wikiID)
-	if err != nil {
-		archiveLog.Info("Failed to get wiki for status update", "err", err)
-		return
-	}
-
 	now := time.Now()
-	wiki.HasArchive = hasArchive
-	wiki.ArchiveLastCheckAt = &now
-	// Clear previous archive error on successful check
-	wiki.ArchiveLastError = nil
-	wiki.ArchiveLastErrorAt = nil
-
-	if err := wikiRepo.Update(ctx, wiki); err != nil {
+	if err := wikiRepo.UpdateArchiveStatus(ctx, wikiID, hasArchive, now); err != nil {
 		archiveLog.Info("Failed to update wiki has_archive status", "err", err)
 	}
 }
@@ -220,19 +208,9 @@ func (s *ArchiveService) updateWikiArchiveStatus(ctx context.Context, db *gorm.D
 // UpdateWikiArchiveError records an archive check error (exported for handler use)
 func (s *ArchiveService) UpdateWikiArchiveError(ctx context.Context, db *gorm.DB, wikiID uuid.UUID, err error) {
 	wikiRepo := repository.NewWikiRepository(db)
-	wiki, getErr := wikiRepo.GetByID(ctx, wikiID)
-	if getErr != nil {
-		archiveLog.Info("Failed to get wiki for error update", "err", getErr)
-		return
-	}
-
 	now := time.Now()
 	errMsg := err.Error()
-	wiki.ArchiveLastError = &errMsg
-	wiki.ArchiveLastErrorAt = &now
-	wiki.ArchiveLastCheckAt = &now
-
-	if updateErr := wikiRepo.Update(ctx, wiki); updateErr != nil {
+	if updateErr := wikiRepo.UpdateArchiveError(ctx, wikiID, errMsg, now); updateErr != nil {
 		archiveLog.Info("Failed to update wiki archive error", "err", updateErr)
 	}
 }

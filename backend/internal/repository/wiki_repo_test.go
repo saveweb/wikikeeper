@@ -190,6 +190,65 @@ func TestWikiRepository_GetByAPIURL(t *testing.T) {
 	assert.Equal(t, apiURL, *found.APIURL)
 }
 
+func TestWikiRepositoryArchiveUpdatesOnlyOwnedFields(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewWikiRepository(db)
+	ctx := context.Background()
+	updatedAt := time.Date(2026, time.July, 1, 12, 0, 0, 0, time.UTC)
+	lastCheck := updatedAt.Add(-time.Hour)
+	lastSuccess := updatedAt.Add(-24 * time.Hour)
+	nextCheck := updatedAt.Add(21 * 24 * time.Hour)
+	lastErrorAt := updatedAt.Add(-2 * time.Hour)
+	lastError := "HTTP 429"
+	archiveError := "old archive error"
+	wiki := &models.Wiki{
+		ID:                  uuid.New(),
+		URL:                 "https://archive-fields.example",
+		Status:              models.WikiStatusOK,
+		CollectionStatus:    models.CollectionStatusRateLimited,
+		LastError:           &lastError,
+		LastErrorAt:         &lastErrorAt,
+		LastSuccessAt:       &lastSuccess,
+		NextCheckAt:         &nextCheck,
+		ConsecutiveFailures: 4,
+		ArchiveLastError:    &archiveError,
+		ArchiveLastErrorAt:  &lastErrorAt,
+		LastCheckAt:         &lastCheck,
+		UpdatedAt:           updatedAt,
+		IsActive:            true,
+	}
+	require.NoError(t, repo.Create(ctx, wiki))
+
+	archiveCheck := updatedAt.Add(48 * time.Hour)
+	require.NoError(t, repo.UpdateArchiveStatus(ctx, wiki.ID, true, archiveCheck))
+
+	updated, err := repo.GetByID(ctx, wiki.ID)
+	require.NoError(t, err)
+	require.True(t, updated.HasArchive)
+	require.Equal(t, archiveCheck, *updated.ArchiveLastCheckAt)
+	require.Nil(t, updated.ArchiveLastError)
+	require.Nil(t, updated.ArchiveLastErrorAt)
+	require.Equal(t, models.CollectionStatusRateLimited, updated.CollectionStatus)
+	require.Equal(t, lastError, *updated.LastError)
+	require.Equal(t, lastErrorAt, *updated.LastErrorAt)
+	require.Equal(t, lastSuccess, *updated.LastSuccessAt)
+	require.Equal(t, nextCheck, *updated.NextCheckAt)
+	require.Equal(t, 4, updated.ConsecutiveFailures)
+	require.Equal(t, updatedAt, updated.UpdatedAt)
+
+	archiveFailureAt := archiveCheck.Add(time.Hour)
+	require.NoError(t, repo.UpdateArchiveError(ctx, wiki.ID, "archive unavailable", archiveFailureAt))
+	updated, err = repo.GetByID(ctx, wiki.ID)
+	require.NoError(t, err)
+	require.Equal(t, archiveFailureAt, *updated.ArchiveLastCheckAt)
+	require.Equal(t, "archive unavailable", *updated.ArchiveLastError)
+	require.Equal(t, archiveFailureAt, *updated.ArchiveLastErrorAt)
+	require.Equal(t, models.CollectionStatusRateLimited, updated.CollectionStatus)
+	require.Equal(t, lastError, *updated.LastError)
+	require.Equal(t, nextCheck, *updated.NextCheckAt)
+	require.Equal(t, updatedAt, updated.UpdatedAt)
+}
+
 func TestWikiRepository_List(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewWikiRepository(db)

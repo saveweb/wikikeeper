@@ -128,6 +128,33 @@ func (r *WikiRepository) Update(ctx context.Context, wiki *models.Wiki) error {
 	return r.db.WithContext(ctx).Save(wiki).Error
 }
 
+// UpdateArchiveStatus updates only archive-owned fields. UpdateColumns avoids
+// model hooks and the generic updated_at timestamp used by stats collection.
+func (r *WikiRepository) UpdateArchiveStatus(ctx context.Context, id uuid.UUID, hasArchive bool, checkedAt time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&models.Wiki{}).
+		Where("id = ?", id).
+		UpdateColumns(map[string]interface{}{
+			"has_archive":           hasArchive,
+			"archive_last_check_at": checkedAt,
+			"archive_last_error":    nil,
+			"archive_last_error_at": nil,
+		}).Error
+}
+
+// UpdateArchiveError records an archive failure without changing collection
+// state, the last verified wiki state, or the generic updated_at timestamp.
+func (r *WikiRepository) UpdateArchiveError(ctx context.Context, id uuid.UUID, errMsg string, checkedAt time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&models.Wiki{}).
+		Where("id = ?", id).
+		UpdateColumns(map[string]interface{}{
+			"archive_last_check_at": checkedAt,
+			"archive_last_error":    errMsg,
+			"archive_last_error_at": checkedAt,
+		}).Error
+}
+
 // Delete deletes a wiki (cascades to stats and archives)
 func (r *WikiRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return r.db.WithContext(ctx).Delete(&models.Wiki{}, "id = ?", id).Error

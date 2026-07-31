@@ -79,4 +79,35 @@ func TestCollectionStateMigrationPostgres(t *testing.T) {
 	require.False(t, unverified.APIAvailable)
 	require.Equal(t, "rate_limited", unverified.CollectionStatus)
 	require.Nil(t, unverified.LastSuccessAt)
+
+	up, err = readMigrationFile(8, "up")
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(up).Error)
+	require.NoError(t, db.Exec(`
+		UPDATE wikis
+		SET next_check_at = CASE
+			WHEN id = ? THEN NOW() - INTERVAL '1 minute'
+			ELSE NOW() + INTERVAL '1 hour'
+		END
+		WHERE id IN (?, ?)
+	`, verifiedID, verifiedID, unverifiedID).Error)
+
+	migrationStart := time.Now().Add(-time.Second)
+	up, err = readMigrationFile(9, "up")
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(up).Error)
+	migrationEnd := time.Now().Add(time.Second)
+
+	verified = readState(verifiedID)
+	require.Equal(t, "pending", verified.CollectionStatus)
+	require.Equal(t, 0, verified.ConsecutiveFailures)
+	require.NotNil(t, verified.NextCheckAt)
+	require.False(t, verified.NextCheckAt.Before(migrationStart))
+	require.False(t, verified.NextCheckAt.After(migrationEnd.Add(7*24*time.Hour)))
+
+	unverified = readState(unverifiedID)
+	require.Equal(t, "rate_limited", unverified.CollectionStatus)
+	require.Equal(t, 1, unverified.ConsecutiveFailures)
+	require.NotNil(t, unverified.NextCheckAt)
+	require.True(t, unverified.NextCheckAt.After(migrationStart))
 }
