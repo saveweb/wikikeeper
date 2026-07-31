@@ -1,7 +1,7 @@
 # Development Dockerfile for WikiKeeper Backend
 # This is meant for local development with hot reload
 
-FROM golang:1.24-alpine
+FROM golang:1.26-alpine
 
 # Install air for hot reload and other development tools
 RUN apk add --no-cache git make
