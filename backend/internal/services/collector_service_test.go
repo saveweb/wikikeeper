@@ -108,6 +108,50 @@ func TestCollectorDoesNotRedetectKnownAPIOnRateLimit(t *testing.T) {
 	require.Contains(t, *updated.LastError, "HTTP 429")
 }
 
+func TestCollectorDoesNotRedetectMissingKnownFandomAPI(t *testing.T) {
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	db := setupCollectorTestDB(t)
+	apiURL := server.URL + "/api.php"
+	indexURL := server.URL + "/index.php"
+	wiki := &models.Wiki{
+		ID:               uuid.New(),
+		URL:              "https://missing.fandom.com",
+		APIURL:           &apiURL,
+		IndexURL:         &indexURL,
+		Status:           models.WikiStatusOK,
+		APIAvailable:     true,
+		CollectionStatus: models.CollectionStatusOK,
+		IsActive:         true,
+	}
+	require.NoError(t, db.Create(wiki).Error)
+
+	collector := NewCollectorService(db, NewMediaWikiService(time.Second, "WikiKeeper-Test/1.0"), &config.Config{})
+	err := collector.CollectSingleWiki(context.Background(), wiki.ID)
+	require.Error(t, err)
+	require.EqualValues(t, 1, requests.Load())
+
+	var updated models.Wiki
+	require.NoError(t, db.First(&updated, "id = ?", wiki.ID).Error)
+	require.NotNil(t, updated.NextCheckAt)
+	require.NotNil(t, updated.LastCheckAt)
+	require.WithinDuration(t, updated.LastCheckAt.Add(terminalFailureInterval), *updated.NextCheckAt, time.Second)
+}
+
+func TestTerminalHTTPFailureUsesLongRecheckInterval(t *testing.T) {
+	wiki := &models.Wiki{
+		URL:                 "https://missing.example",
+		ConsecutiveFailures: 1,
+	}
+	err := &HTTPStatusError{StatusCode: http.StatusGone, Body: "gone"}
+	require.Equal(t, terminalFailureInterval, collectionFailureBackoff(wiki, err))
+}
+
 func TestSharedCollectorBlocksManualCheckDuringProviderCooldown(t *testing.T) {
 	var requests atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -195,6 +239,10 @@ func TestCollectionErrorChangesVerifiedStatusAtThreshold(t *testing.T) {
 		require.Equal(t, attempt, updated.ConsecutiveFailures)
 		require.Equal(t, models.CollectionStatusError, updated.CollectionStatus)
 		require.NotNil(t, updated.LastError)
+		require.NotNil(t, updated.LastCheckAt)
+		require.NotNil(t, updated.NextCheckAt)
+		expectedDelay := baseFailureBackoff * time.Duration(1<<(attempt-1))
+		require.WithinDuration(t, updated.LastCheckAt.Add(expectedDelay), *updated.NextCheckAt, time.Second)
 		if attempt < siteFailureThreshold {
 			require.Equal(t, models.WikiStatusOK, updated.Status)
 			require.True(t, updated.APIAvailable)
@@ -228,5 +276,22 @@ func TestCollectionSuccessClearsBackoffState(t *testing.T) {
 	require.Nil(t, wiki.LastError)
 	require.Nil(t, wiki.LastErrorAt)
 	require.Equal(t, now, *wiki.LastSuccessAt)
-	require.Equal(t, now.Add(collectionInterval), *wiki.NextCheckAt)
+	require.Equal(t, now.Add(defaultCollectionInterval), *wiki.NextCheckAt)
+}
+
+func TestFandomCollectionSuccessUsesReducedCadence(t *testing.T) {
+	now := time.Date(2026, time.August, 1, 12, 0, 0, 0, time.UTC)
+	wiki := &models.Wiki{URL: "https://example.fandom.com"}
+
+	markWikiCollectionSuccess(wiki, now)
+
+	require.Equal(t, now.Add(fandomCollectionInterval), *wiki.NextCheckAt)
+}
+
+func TestCollectionFailureBackoffIsCapped(t *testing.T) {
+	wiki := &models.Wiki{
+		URL:                 "https://flaky.example",
+		ConsecutiveFailures: 20,
+	}
+	require.Equal(t, maxFailureBackoff, collectionFailureBackoff(wiki, errors.New("timeout")))
 }

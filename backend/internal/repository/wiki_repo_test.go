@@ -339,6 +339,76 @@ func TestWikiRepository_GetDueForUpdate(t *testing.T) {
 	require.Equal(t, "https://due.example", due[1].URL)
 }
 
+func TestWikiRepository_GetDueForUpdateFair(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewWikiRepository(db)
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 1, 5, 0, 0, 0, time.UTC)
+	veryOld := now.Add(-72 * time.Hour)
+	old := now.Add(-48 * time.Hour)
+	lastSuccess := now.Add(-24 * time.Hour)
+
+	wikis := []*models.Wiki{
+		{ID: uuid.New(), URL: "https://never-oldest.example", Status: models.WikiStatusPending, CollectionStatus: models.CollectionStatusPending, NextCheckAt: &veryOld, IsActive: true},
+		{ID: uuid.New(), URL: "https://never-second.example", Status: models.WikiStatusPending, CollectionStatus: models.CollectionStatusPending, NextCheckAt: &old, IsActive: true},
+		{ID: uuid.New(), URL: "https://healthy.example", Status: models.WikiStatusOK, CollectionStatus: models.CollectionStatusOK, LastSuccessAt: &lastSuccess, NextCheckAt: &old, IsActive: true},
+		{ID: uuid.New(), URL: "https://failed.example", Status: models.WikiStatusOK, CollectionStatus: models.CollectionStatusError, LastSuccessAt: &lastSuccess, NextCheckAt: &old, IsActive: true},
+	}
+	for _, wiki := range wikis {
+		require.NoError(t, repo.Create(ctx, wiki))
+	}
+
+	due, err := repo.GetDueForUpdateFair(ctx, 3, now)
+	require.NoError(t, err)
+	require.Len(t, due, 3)
+	require.Equal(t, "https://healthy.example", due[0].URL)
+	require.Equal(t, "https://never-oldest.example", due[1].URL)
+	require.Equal(t, "https://failed.example", due[2].URL)
+
+	due, err = repo.GetDueForUpdateFair(ctx, 4, now)
+	require.NoError(t, err)
+	require.Len(t, due, 4)
+	require.Equal(t, "https://never-second.example", due[3].URL)
+}
+
+func TestWikiRepository_GetDueForArchiveCheck(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewWikiRepository(db)
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 1, 5, 0, 0, 0, time.UTC)
+	dueBefore := now.Add(-3 * 24 * time.Hour)
+	oldCheck := dueBefore.Add(-time.Hour)
+	recentCheck := dueBefore.Add(time.Hour)
+	apiURL := "https://example.org/api.php"
+	emptyAPIURL := ""
+
+	wikis := []*models.Wiki{
+		{ID: uuid.New(), URL: "https://no-api.example", Status: models.WikiStatusError, IsActive: true},
+		{ID: uuid.New(), URL: "https://empty-api.example", APIURL: &emptyAPIURL, Status: models.WikiStatusError, IsActive: true},
+		{ID: uuid.New(), URL: "https://never-checked.example", APIURL: &apiURL, Status: models.WikiStatusOK, IsActive: true},
+		{ID: uuid.New(), URL: "https://due.example", APIURL: &apiURL, Status: models.WikiStatusOK, ArchiveLastCheckAt: &oldCheck, IsActive: true},
+		{ID: uuid.New(), URL: "https://recent.example", APIURL: &apiURL, Status: models.WikiStatusOK, ArchiveLastCheckAt: &recentCheck, IsActive: true},
+		{ID: uuid.New(), URL: "https://inactive.example", APIURL: &apiURL, Status: models.WikiStatusOK, IsActive: false},
+	}
+	for _, wiki := range wikis {
+		require.NoError(t, repo.Create(ctx, wiki))
+	}
+	require.NoError(t, db.Model(&models.Wiki{}).
+		Where("id = ?", wikis[5].ID).
+		Update("is_active", false).Error)
+
+	due, err := repo.GetDueForArchiveCheck(ctx, 10, dueBefore)
+	require.NoError(t, err)
+	require.Len(t, due, 2)
+	require.Equal(t, "https://never-checked.example", due[0].URL)
+	require.Equal(t, "https://due.example", due[1].URL)
+
+	limited, err := repo.GetDueForArchiveCheck(ctx, 1, dueBefore)
+	require.NoError(t, err)
+	require.Len(t, limited, 1)
+	require.Equal(t, "https://never-checked.example", limited[0].URL)
+}
+
 func TestWikiRepository_DeferCollectionChecksOnlyChangesSchedule(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewWikiRepository(db)

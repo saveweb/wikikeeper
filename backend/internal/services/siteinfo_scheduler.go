@@ -123,7 +123,7 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 
 	// Get active wikis whose persisted collection schedule is due.
 	wikiRepo := repository.NewWikiRepository(s.db)
-	wikis, err := wikiRepo.GetDueForUpdate(ctx, int(s.config.SiteinfoCheckBatchSize), time.Now())
+	wikis, err := wikiRepo.GetDueForUpdateFair(ctx, int(s.config.SiteinfoCheckBatchSize), time.Now())
 	if err != nil {
 		siteinfoSchedulerLog.Error("failed to get wikis", "error", err)
 		return

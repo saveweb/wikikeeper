@@ -312,6 +312,42 @@ func TestInitializeDetectsLocalizedMediaWikiPaths(t *testing.T) {
 	}
 }
 
+func TestMediaWikiCandidatesUseSingleKnownFandomPath(t *testing.T) {
+	tests := []struct {
+		baseURL  string
+		apiURL   string
+		indexURL string
+	}{
+		{
+			baseURL:  "https://example.fandom.com",
+			apiURL:   "https://example.fandom.com/api.php",
+			indexURL: "https://example.fandom.com/index.php",
+		},
+		{
+			baseURL:  "https://example.fandom.com/pl",
+			apiURL:   "https://example.fandom.com/pl/api.php",
+			indexURL: "https://example.fandom.com/pl/index.php",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.baseURL, func(t *testing.T) {
+			candidates := mediaWikiCandidates(tt.baseURL)
+			require.Len(t, candidates, 1)
+			require.Equal(t, tt.apiURL, candidates[0].apiURL)
+			require.Equal(t, tt.indexURL, candidates[0].indexURL)
+		})
+	}
+}
+
+func TestMediaWikiCandidatesKeepGenericFallbacks(t *testing.T) {
+	candidates := mediaWikiCandidates("https://wiki.example.org")
+	require.Len(t, candidates, 3)
+	require.Equal(t, "https://wiki.example.org/w/api.php", candidates[0].apiURL)
+	require.Equal(t, "https://wiki.example.org/api.php", candidates[1].apiURL)
+	require.Equal(t, "https://wiki.example.org/wiki/api.php", candidates[2].apiURL)
+}
+
 // TestMediaWikiService_Timeout tests timeout handling
 func TestMediaWikiService_Timeout(t *testing.T) {
 	requireMediaWikiIntegration(t)

@@ -162,6 +162,69 @@ func (r *WikiRepository) GetDueForUpdate(ctx context.Context, limit int, now tim
 	return wikis, nil
 }
 
+// GetDueForUpdateFair independently selects healthy, never-successful, and
+// failed wikis, then interleaves the queues so no class can starve the others.
+func (r *WikiRepository) GetDueForUpdateFair(ctx context.Context, limit int, now time.Time) ([]*models.Wiki, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	filters := []string{
+		"last_success_at IS NOT NULL AND collection_status = 'ok'",
+		"last_success_at IS NULL",
+		"last_success_at IS NOT NULL AND collection_status <> 'ok'",
+	}
+	queues := make([][]*models.Wiki, 0, len(filters))
+	for _, filter := range filters {
+		var queue []*models.Wiki
+		err := r.db.WithContext(ctx).
+			Where("is_active = ?", true).
+			Where("next_check_at IS NULL OR next_check_at <= ?", now).
+			Where(filter).
+			Order("next_check_at ASC NULLS FIRST").
+			Limit(limit).
+			Find(&queue).Error
+		if err != nil {
+			return nil, err
+		}
+		queues = append(queues, queue)
+	}
+
+	wikis := make([]*models.Wiki, 0, limit)
+	for position := 0; len(wikis) < limit; position++ {
+		added := false
+		for _, queue := range queues {
+			if position < len(queue) {
+				wikis = append(wikis, queue[position])
+				added = true
+				if len(wikis) == limit {
+					break
+				}
+			}
+		}
+		if !added {
+			break
+		}
+	}
+	return wikis, nil
+}
+
+// GetDueForArchiveCheck returns active wikis with a known API whose archive
+// check has never run or is older than dueBefore.
+func (r *WikiRepository) GetDueForArchiveCheck(ctx context.Context, limit int, dueBefore time.Time) ([]*models.Wiki, error) {
+	var wikis []*models.Wiki
+	err := r.db.WithContext(ctx).
+		Where("is_active = ?", true).
+		Where("api_url IS NOT NULL AND api_url <> ''").
+		Where("archive_last_check_at IS NULL OR archive_last_check_at <= ?", dueBefore).
+		Order("archive_last_check_at ASC NULLS FIRST").
+		Limit(limit).
+		Find(&wikis).Error
+	if err != nil {
+		return nil, err
+	}
+	return wikis, nil
+}
+
 // DeferCollectionChecks postpones queued checks without recording an attempt.
 func (r *WikiRepository) DeferCollectionChecks(ctx context.Context, ids []uuid.UUID, nextCheckAt time.Time) error {
 	if len(ids) == 0 {

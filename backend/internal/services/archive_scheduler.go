@@ -14,6 +14,12 @@ import (
 
 var archiveSchedulerLog = applogger.With("component", "archive-scheduler")
 
+const (
+	archiveCheckInterval    = 3 * 24 * time.Hour
+	archiveBusyPollInterval = time.Second
+	archiveIdlePollInterval = time.Minute
+)
+
 // ArchiveScheduler manages periodic archive.org checking
 type ArchiveScheduler struct {
 	db             *gorm.DB
@@ -79,30 +85,24 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 
 	startTime := time.Now()
 
-	// Get wikis that need archive checking
-	// Priority: NULL archive_last_check_at first (never checked), then oldest archive_last_check_at
 	wikiRepo := repository.NewWikiRepository(s.db)
-	wikis, _, err := wikiRepo.List(ctx, repository.ListOptions{
-		Page:     1,
-		PageSize: int(s.config.ArchiveCheckBatchSize),
-		Status:   nil, // Get all statuses
-		// Order by archive_last_check_at ASC (NULL first, then oldest)
-		OrderBy: "archive_last_check_at ASC NULLS FIRST",
-	})
+	wikis, err := wikiRepo.GetDueForArchiveCheck(
+		ctx,
+		s.config.ArchiveCheckBatchSize,
+		time.Now().Add(-archiveCheckInterval),
+	)
 	if err != nil {
 		archiveSchedulerLog.Error("failed to get wikis", "error", err)
 		return
 	}
 
 	if len(wikis) == 0 {
-		archiveSchedulerLog.Warn("found wikis to check archives", "total", len(wikis))
+		archiveSchedulerLog.Info("no due wikis found for archive checking")
 		return
 	}
 
-	// Process wikis with rate limiting
 	successCount := 0
 	errorCount := 0
-	skippedCount := 0
 
 	for i, wiki := range wikis {
 		// Check if we should stop
@@ -111,25 +111,6 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 			archiveSchedulerLog.Warn("archive check cycle interrupted")
 			return
 		default:
-		}
-
-		// Skip wikis without API URL
-		if wiki.APIURL == nil {
-			archiveSchedulerLog.Info("skipping wiki: no API URL", "url", wiki.URL)
-			skippedCount++
-			continue
-		}
-
-		// Skip recently checked wikis
-		if wiki.ArchiveLastCheckAt != nil {
-			timeSinceLastCheck := time.Since(*wiki.ArchiveLastCheckAt)
-			minInterval := 3 * 24 * time.Hour // 3 days
-
-			if timeSinceLastCheck < minInterval {
-				archiveSchedulerLog.Info("skipping wiki: recently checked", "url", wiki.URL, "since", timeSinceLastCheck)
-				skippedCount++
-				continue
-			}
 		}
 
 		archiveSchedulerLog.Info("checking wiki", "index", i+1, "total", len(wikis), "url", wiki.URL)
@@ -154,14 +135,24 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 
 	elapsed := time.Since(startTime)
 	archiveSchedulerLog.Info("archive check cycle completed",
-		"success", successCount, "errors", errorCount, "skipped", skippedCount, "duration", elapsed.Round(time.Second))
+		"success", successCount, "errors", errorCount, "duration", elapsed.Round(time.Second))
 }
 
 // periodicRun runs archive checks continuously with backoff based on archive_last_check_at
 func (s *ArchiveScheduler) periodicRun(ctx context.Context) {
 	defer s.wg.Done()
+	if s.config.ArchiveCheckBatchSize <= 0 {
+		archiveSchedulerLog.Info("archive collection disabled", "batch_size", s.config.ArchiveCheckBatchSize)
+		select {
+		case <-s.stopCh:
+			archiveSchedulerLog.Info("periodic run stopped")
+		case <-ctx.Done():
+			archiveSchedulerLog.Info("context cancelled")
+		}
+		return
+	}
 
-	ticker := time.NewTimer(time.Second)
+	ticker := time.NewTimer(archiveBusyPollInterval)
 
 	for {
 		select {
@@ -172,41 +163,25 @@ func (s *ArchiveScheduler) periodicRun(ctx context.Context) {
 			archiveSchedulerLog.Info("context cancelled")
 			return
 		case <-ticker.C:
-			// Check the oldest archive_last_check_at before running
 			wikiRepo := repository.NewWikiRepository(s.db)
-			wikis, _, err := wikiRepo.List(ctx, repository.ListOptions{
-				Page:     1,
-				PageSize: 1,
-				Status:   nil,
-				OrderBy:  "archive_last_check_at ASC NULLS FIRST",
-			})
+			wikis, err := wikiRepo.GetDueForArchiveCheck(
+				ctx,
+				1,
+				time.Now().Add(-archiveCheckInterval),
+			)
 			if err != nil {
-				archiveSchedulerLog.Error("failed to list wikis", "error", err, "sleep", time.Minute)
-				ticker.Reset(time.Minute)
+				archiveSchedulerLog.Error("failed to list wikis", "error", err, "sleep", archiveIdlePollInterval)
+				ticker.Reset(archiveIdlePollInterval)
 				continue
 			}
 
 			if len(wikis) == 0 {
-				archiveSchedulerLog.Info("no wikis found for archive checking", "sleep", time.Minute)
-				ticker.Reset(time.Minute)
+				archiveSchedulerLog.Info("no due wikis found for archive checking", "sleep", archiveIdlePollInterval)
+				ticker.Reset(archiveIdlePollInterval)
 				continue
 			}
 
-			// Check if we need to back off
-			if wikis[0].ArchiveLastCheckAt != nil {
-				timeSinceLastCheck := time.Since(*wikis[0].ArchiveLastCheckAt)
-				backoffThreshold := 3 * 24 * time.Hour // 3 days
-
-				if timeSinceLastCheck < backoffThreshold {
-					archiveSchedulerLog.Info("backing off, recent update detected",
-						"last_check", wikis[0].ArchiveLastCheckAt,
-						"since", timeSinceLastCheck)
-					ticker.Reset(time.Minute)
-					continue
-				}
-			}
-
-			ticker.Reset(time.Second)
+			ticker.Reset(archiveBusyPollInterval)
 			s.run(ctx)
 		}
 	}

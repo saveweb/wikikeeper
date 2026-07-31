@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"strings"
 	"time"
 
@@ -17,15 +19,23 @@ import (
 var collectorLog = applogger.With("component", "collector")
 
 const (
-	collectionInterval   = 3 * 24 * time.Hour
-	siteFailureThreshold = 3
+	defaultCollectionInterval = 30 * 24 * time.Hour
+	fandomCollectionInterval  = 21 * 24 * time.Hour
+	terminalFailureInterval   = 90 * 24 * time.Hour
+	baseFailureBackoff        = 3 * 24 * time.Hour
+	maxFailureBackoff         = 30 * 24 * time.Hour
+	siteFailureThreshold      = 3
 )
 
 func markWikiCollectionSuccess(wiki *models.Wiki, now time.Time) {
 	wiki.APIAvailable = true
 	wiki.LastCheckAt = &now
 	wiki.LastSuccessAt = &now
-	nextCheckAt := now.Add(collectionInterval)
+	interval := defaultCollectionInterval
+	if requestGroup(wiki.URL) == "fandom.com" {
+		interval = fandomCollectionInterval
+	}
+	nextCheckAt := now.Add(interval)
 	wiki.NextCheckAt = &nextCheckAt
 	wiki.Status = models.WikiStatusOK
 	wiki.CollectionStatus = models.CollectionStatusOK
@@ -109,6 +119,9 @@ func (s *CollectorService) collectWiki(ctx context.Context, wiki *models.Wiki) e
 			if _, rateLimited := asRateLimitError(err); rateLimited {
 				return s.recordCollectionError(ctx, wiki.ID, "fetch_siteinfo", err)
 			}
+			if requestGroup(wiki.URL) == "fandom.com" && hasHTTPStatus(err, http.StatusNotFound, http.StatusGone) {
+				return s.recordCollectionError(ctx, wiki.ID, "fetch_siteinfo", err)
+			}
 
 			collectorLog.Info("Existing API failed, re-detecting", "err", err)
 			client, err = s.mwService.Initialize(ctx, wiki.URL)
@@ -121,10 +134,25 @@ func (s *CollectorService) collectWiki(ctx context.Context, wiki *models.Wiki) e
 			}
 		}
 	} else {
-		// No existing API URL, need to detect
-		client, err = s.mwService.Initialize(ctx, wiki.URL)
-		if err != nil {
-			return s.recordCollectionError(ctx, wiki.ID, "initialize_mediawiki", err)
+		// Fandom's API path is deterministic. Construct it directly so a
+		// collection does not fetch siteinfo once for detection and again for
+		// the actual snapshot.
+		if requestGroup(wiki.URL) == "fandom.com" {
+			baseURL := NormalizeURL(wiki.URL)
+			if baseURL == "" {
+				return s.recordCollectionError(ctx, wiki.ID, "normalize_url", ErrInvalidWikiURL)
+			}
+			if strings.HasPrefix(baseURL, "http://") {
+				baseURL = "https://" + strings.TrimPrefix(baseURL, "http://")
+			}
+			candidates := mediaWikiCandidates(baseURL)
+			client = s.mwService.CreateClientWithURL(wiki.URL, candidates[0].apiURL, candidates[0].indexURL)
+		} else {
+			// Unknown providers still need generic API path detection.
+			client, err = s.mwService.Initialize(ctx, wiki.URL)
+			if err != nil {
+				return s.recordCollectionError(ctx, wiki.ID, "initialize_mediawiki", err)
+			}
 		}
 
 		siteinfo, err = s.mwService.FetchSiteinfo(ctx, client)
@@ -258,9 +286,10 @@ func (s *CollectorService) UpdateWikiStatus(ctx context.Context, wikiID uuid.UUI
 	now := time.Now()
 	wiki.CollectionStatus = models.CollectionStatusError
 	wiki.LastCheckAt = &now
-	nextCheckAt := now.Add(collectionInterval)
-	wiki.NextCheckAt = &nextCheckAt
 	wiki.ConsecutiveFailures++
+	delay := collectionFailureBackoff(wiki, err)
+	nextCheckAt := now.Add(delay)
+	wiki.NextCheckAt = &nextCheckAt
 	if wiki.ConsecutiveFailures >= siteFailureThreshold {
 		wiki.Status = status
 		wiki.APIAvailable = false
@@ -276,6 +305,38 @@ func (s *CollectorService) UpdateWikiStatus(ctx context.Context, wikiID uuid.UUI
 	if updateErr := wikiRepo.Update(ctx, wiki); updateErr != nil {
 		collectorLog.Info("Failed to update wiki status", "err", updateErr)
 	}
+}
+
+func hasHTTPStatus(err error, statuses ...int) bool {
+	var statusErr *HTTPStatusError
+	if !errors.As(err, &statusErr) {
+		return false
+	}
+	for _, status := range statuses {
+		if statusErr.StatusCode == status {
+			return true
+		}
+	}
+	return false
+}
+
+func collectionFailureBackoff(wiki *models.Wiki, err error) time.Duration {
+	if hasHTTPStatus(err, http.StatusNotFound, http.StatusGone) {
+		return terminalFailureInterval
+	}
+	failures := wiki.ConsecutiveFailures
+	if failures < 1 {
+		failures = 1
+	}
+	shift := failures - 1
+	if shift > 10 {
+		shift = 10
+	}
+	delay := baseFailureBackoff * time.Duration(1<<shift)
+	if delay > maxFailureBackoff {
+		return maxFailureBackoff
+	}
+	return delay
 }
 
 // UpdateWikiRateLimit records a transient collection failure without changing

@@ -61,6 +61,11 @@ type MediaWikiClient struct {
 	WasRedirected bool    // Whether URL was permanently redirected
 }
 
+type mediaWikiCandidate struct {
+	apiURL   string
+	indexURL string
+}
+
 // SiteInfo contains site information and statistics
 type SiteInfo struct {
 	General      SiteInfoGeneral
@@ -237,15 +242,7 @@ func (s *MediaWikiService) detectAPIURL(ctx context.Context, baseURL string) (ap
 	// Remove trailing slash for consistent path joining
 	baseURL = strings.TrimSuffix(baseURL, "/")
 
-	// Common API paths to try
-	candidates := []struct {
-		apiURL   string
-		indexURL string
-	}{
-		{baseURL + "/w/api.php", baseURL + "/w/index.php"},
-		{baseURL + "/api.php", baseURL + "/index.php"},
-		{baseURL + "/wiki/api.php", baseURL + "/wiki/index.php"},
-	}
+	candidates := mediaWikiCandidates(baseURL)
 
 	// Track last error details for better error reporting
 	var lastErr error
@@ -253,6 +250,30 @@ func (s *MediaWikiService) detectAPIURL(ctx context.Context, baseURL string) (ap
 	var lastRespBody string
 
 	for _, candidate := range candidates {
+		// Fandom has a stable API layout, including localized paths such as
+		// /pl/api.php. Avoid spending an extra request on a redirect probe.
+		if requestGroup(candidate.apiURL) == "fandom.com" {
+			resp, requestErr := s.makeRequest(ctx, candidate.apiURL+"?action=query&meta=siteinfo&format=json")
+			if requestErr != nil {
+				if _, rateLimited := asRateLimitError(requestErr); rateLimited {
+					return "", "", requestErr
+				}
+				lastErr = requestErr
+				continue
+			}
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			var result map[string]interface{}
+			if json.Unmarshal(body, &result) == nil {
+				if _, ok := result["query"]; ok {
+					return candidate.apiURL, candidate.indexURL, nil
+				}
+			}
+			lastHTTPStatus = resp.StatusCode
+			lastRespBody = string(body)
+			continue
+		}
+
 		// Check for permanent redirects on the API URL
 		redirectedAPI, hasRedirect, checkErr := s.checkRedirect(ctx, candidate.apiURL)
 		if _, rateLimited := asRateLimitError(checkErr); rateLimited {
@@ -359,6 +380,21 @@ func (s *MediaWikiService) detectAPIURL(ctx context.Context, baseURL string) (ap
 		return "", "", NewMediaWikiError("detect_api", baseURL, fmt.Errorf("%s: %w", errMsg, lastErr))
 	}
 	return "", "", NewMediaWikiError("detect_api", baseURL, errors.New(errMsg))
+}
+
+func mediaWikiCandidates(baseURL string) []mediaWikiCandidate {
+	baseURL = strings.TrimSuffix(baseURL, "/")
+	if requestGroup(baseURL) == "fandom.com" {
+		return []mediaWikiCandidate{{
+			apiURL:   baseURL + "/api.php",
+			indexURL: baseURL + "/index.php",
+		}}
+	}
+	return []mediaWikiCandidate{
+		{apiURL: baseURL + "/w/api.php", indexURL: baseURL + "/w/index.php"},
+		{apiURL: baseURL + "/api.php", indexURL: baseURL + "/index.php"},
+		{apiURL: baseURL + "/wiki/api.php", indexURL: baseURL + "/wiki/index.php"},
+	}
 }
 
 // checkRedirect checks for permanent redirect (301/308)
