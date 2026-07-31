@@ -4,7 +4,8 @@
         <a href="/wikis" class="text-gray-400 hover:text-gray-600"
             >&larr; Wikis</a
         >
-        <h1 class="text-2xl font-bold text-gray-900">{{toa .Wiki.Sitename}}</h1>
+        <img src="/api/wikis/{{.Wiki.ID}}/thumbnail" alt="" class="h-12 w-12 rounded object-cover flex-none bg-gray-100">
+        <h1 class="text-2xl font-bold text-gray-900">{{wikiLabel .Wiki.Sitename .Wiki.WikiName .Wiki.URL}}</h1>
         <span
             class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-{{statusColor .Wiki.Status}}-100 text-{{statusColor .Wiki.Status}}-700"
         >

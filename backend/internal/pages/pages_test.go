@@ -109,7 +109,34 @@ func TestDashboardMissingWikiNameUsesLinkedHostname(t *testing.T) {
 	body := rec.Body.String()
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, body, `href="/wikis/`+wikiID.String()+`"`)
-	require.Contains(t, body, ">alacity.miraheze.org</a>")
+	require.Contains(t, body, ">alacity.miraheze.org</span>")
+	require.Contains(t, body, `src="/api/wikis/`+wikiID.String()+`/thumbnail"`)
+}
+
+func TestWikiListRendersThumbnail(t *testing.T) {
+	wikiID := uuid.New()
+	p := &Pages{
+		cfg:         &config.Config{LogLevel: "INFO"},
+		templateDir: "../../web/templates",
+	}
+	p.baseTemplates = p.parseBaseTemplates()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/wikis", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, p.renderPartial(c, "wiki_list.html", "wiki_list_content", M{
+		"Wikis":    []*models.Wiki{{ID: wikiID, URL: "https://example.org", Status: models.WikiStatusOK}},
+		"Total":    int64(1),
+		"Page":     1,
+		"PageSize": 20,
+		"Pages":    1,
+		"BaseURL":  "/wikis",
+	}))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `src="/api/wikis/`+wikiID.String()+`/thumbnail"`)
 }
 
 func TestStatsChartPointsAreChronological(t *testing.T) {
@@ -171,6 +198,8 @@ func TestWikiDetailRendersErrorsForPublicViewer(t *testing.T) {
 	require.Contains(t, body, "Last Stats Error")
 	require.Contains(t, body, "Last Archive Error")
 	require.Contains(t, body, "collection: rate limited")
+	require.Contains(t, body, `/api/wikis/`)
+	require.Contains(t, body, `/thumbnail`)
 	require.Contains(t, body, "HTTP 429")
 	require.Contains(t, body, "archive lookup timed out")
 	require.Contains(t, body, "2026-07-31 04:25")
