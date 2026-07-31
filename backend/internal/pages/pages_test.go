@@ -119,6 +119,7 @@ func TestWikiDetailRendersErrorsForPublicViewer(t *testing.T) {
 			ID:                 uuid.New(),
 			URL:                "https://example.fandom.com",
 			Status:             models.WikiStatusError,
+			CollectionStatus:   models.CollectionStatusRateLimited,
 			LastError:          &statsError,
 			LastErrorAt:        &statsErrorAt,
 			ArchiveLastError:   &archiveError,
@@ -130,6 +131,7 @@ func TestWikiDetailRendersErrorsForPublicViewer(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, body, "Last Stats Error")
 	require.Contains(t, body, "Last Archive Error")
+	require.Contains(t, body, "collection: rate limited")
 	require.Contains(t, body, "HTTP 429")
 	require.Contains(t, body, "archive lookup timed out")
 	require.Contains(t, body, "2026-07-31 04:25")

@@ -174,9 +174,10 @@ func (h *WikiHandler) Create(c echo.Context) error {
 
 	// Create wiki
 	wiki := &models.Wiki{
-		ID:     uuid.New(),
-		URL:    wikiURL,
-		Status: models.WikiStatusPending,
+		ID:               uuid.New(),
+		URL:              wikiURL,
+		Status:           models.WikiStatusPending,
+		CollectionStatus: models.CollectionStatusPending,
 	}
 	if req.WikiName != nil {
 		wiki.WikiName = req.WikiName

@@ -2,8 +2,6 @@ package services
 
 import (
 	"context"
-	"errors"
-	"net/http"
 	"strings"
 	"time"
 
@@ -17,6 +15,24 @@ import (
 )
 
 var collectorLog = applogger.With("component", "collector")
+
+const (
+	collectionInterval   = 3 * 24 * time.Hour
+	siteFailureThreshold = 3
+)
+
+func markWikiCollectionSuccess(wiki *models.Wiki, now time.Time) {
+	wiki.APIAvailable = true
+	wiki.LastCheckAt = &now
+	wiki.LastSuccessAt = &now
+	nextCheckAt := now.Add(collectionInterval)
+	wiki.NextCheckAt = &nextCheckAt
+	wiki.Status = models.WikiStatusOK
+	wiki.CollectionStatus = models.CollectionStatusOK
+	wiki.ConsecutiveFailures = 0
+	wiki.LastError = nil
+	wiki.LastErrorAt = nil
+}
 
 // CollectorService coordinates wiki data collection
 type CollectorService struct {
@@ -61,21 +77,20 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 
 		// If fetch failed with existing API, try re-detecting
 		if err != nil {
-			var statusErr *HTTPStatusError
-			if errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusTooManyRequests {
-				s.UpdateWikiStatus(ctx, wikiID, models.WikiStatusError, err)
+			if _, rateLimited := asRateLimitError(err); rateLimited {
+				s.UpdateWikiRateLimit(ctx, wikiID, err)
 				return NewCollectorError("fetch_siteinfo", err)
 			}
 
 			collectorLog.Info("Existing API failed, re-detecting", "err", err)
 			client, err = s.mwService.Initialize(ctx, wiki.URL)
 			if err != nil {
-				s.UpdateWikiStatus(ctx, wikiID, models.WikiStatusError, err)
+				s.UpdateWikiCollectionFailure(ctx, wikiID, err)
 				return NewCollectorError("initialize_mediawiki", err)
 			}
 			siteinfo, err = s.mwService.FetchSiteinfo(ctx, client)
 			if err != nil {
-				s.UpdateWikiStatus(ctx, wikiID, models.WikiStatusError, err)
+				s.UpdateWikiCollectionFailure(ctx, wikiID, err)
 				return NewCollectorError("fetch_siteinfo", err)
 			}
 		}
@@ -83,13 +98,13 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 		// No existing API URL, need to detect
 		client, err = s.mwService.Initialize(ctx, wiki.URL)
 		if err != nil {
-			s.UpdateWikiStatus(ctx, wikiID, models.WikiStatusError, err)
+			s.UpdateWikiCollectionFailure(ctx, wikiID, err)
 			return NewCollectorError("initialize_mediawiki", err)
 		}
 
 		siteinfo, err = s.mwService.FetchSiteinfo(ctx, client)
 		if err != nil {
-			s.UpdateWikiStatus(ctx, wikiID, models.WikiStatusError, err)
+			s.UpdateWikiCollectionFailure(ctx, wikiID, err)
 			return NewCollectorError("fetch_siteinfo", err)
 		}
 	}
@@ -104,12 +119,7 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 	wiki.MaxPageID = siteinfo.General.MaxPageID
 	wiki.APIURL = client.APIURL
 	wiki.IndexURL = client.IndexURL
-	wiki.APIAvailable = true
-	wiki.LastCheckAt = &now
-	wiki.Status = models.WikiStatusOK
-	// Clear previous error on successful collection
-	wiki.LastError = nil
-	wiki.LastErrorAt = nil
+	markWikiCollectionSuccess(wiki, now)
 
 	// Check for duplicate API URL
 	if client.APIURL != nil {
@@ -202,6 +212,14 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 	return nil
 }
 
+func (s *CollectorService) UpdateWikiCollectionFailure(ctx context.Context, wikiID uuid.UUID, err error) {
+	if _, rateLimited := asRateLimitError(err); rateLimited {
+		s.UpdateWikiRateLimit(ctx, wikiID, err)
+		return
+	}
+	s.UpdateWikiStatus(ctx, wikiID, models.WikiStatusError, err)
+}
+
 // UpdateWikiStatus updates wiki status and error information
 func (s *CollectorService) UpdateWikiStatus(ctx context.Context, wikiID uuid.UUID, status models.WikiStatus, err error) {
 	wikiRepo := repository.NewWikiRepository(s.db)
@@ -212,19 +230,54 @@ func (s *CollectorService) UpdateWikiStatus(ctx context.Context, wikiID uuid.UUI
 	}
 
 	now := time.Now()
-	wiki.Status = status
+	wiki.CollectionStatus = models.CollectionStatusError
 	wiki.LastCheckAt = &now
+	nextCheckAt := now.Add(collectionInterval)
+	wiki.NextCheckAt = &nextCheckAt
+	wiki.ConsecutiveFailures++
+	if wiki.ConsecutiveFailures >= siteFailureThreshold {
+		wiki.Status = status
+		wiki.APIAvailable = false
+	}
 
 	if err != nil && status == models.WikiStatusError {
 		errMsg := err.Error()
 		errMsgUTF8Safe := strings.ToValidUTF8(errMsg, `\uFFFD`)
 		wiki.LastError = &errMsgUTF8Safe
 		wiki.LastErrorAt = &now
-		wiki.APIAvailable = false
 	}
 
 	if updateErr := wikiRepo.Update(ctx, wiki); updateErr != nil {
 		collectorLog.Info("Failed to update wiki status", "err", updateErr)
+	}
+}
+
+// UpdateWikiRateLimit records a transient collection failure without changing
+// the last verified wiki status or API availability.
+func (s *CollectorService) UpdateWikiRateLimit(ctx context.Context, wikiID uuid.UUID, err error) {
+	wikiRepo := repository.NewWikiRepository(s.db)
+	wiki, getErr := wikiRepo.GetByID(ctx, wikiID)
+	if getErr != nil {
+		collectorLog.Info("Failed to get wiki for rate-limit update", "err", getErr)
+		return
+	}
+
+	now := time.Now()
+	wiki.CollectionStatus = models.CollectionStatusRateLimited
+	wiki.LastCheckAt = &now
+	wiki.ConsecutiveFailures++
+	delay, _ := rateLimitBackoff(err, wiki.ConsecutiveFailures, now, positiveJitter)
+	nextCheckAt := now.Add(delay)
+	wiki.NextCheckAt = &nextCheckAt
+
+	if err != nil {
+		errMsg := strings.ToValidUTF8(err.Error(), `\uFFFD`)
+		wiki.LastError = &errMsg
+		wiki.LastErrorAt = &now
+	}
+
+	if updateErr := wikiRepo.Update(ctx, wiki); updateErr != nil {
+		collectorLog.Info("Failed to record wiki rate limit", "err", updateErr)
 	}
 }
 

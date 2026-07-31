@@ -73,6 +73,13 @@
                     <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-{{statusColor .Status}}-100 text-{{statusColor .Status}}-700">
                         {{.Status}}
                     </span>
+                    {{if eq .CollectionStatus "rate_limited"}}
+                    <div class="mt-1 text-xs text-amber-700">rate limited</div>
+                    {{else if eq .CollectionStatus "error"}}
+                    <div class="mt-1 text-xs text-red-600">collection error</div>
+                    {{else if eq .CollectionStatus "pending"}}
+                    <div class="mt-1 text-xs text-gray-500">collection pending</div>
+                    {{end}}
                 </td>
                 <td class="px-4 py-3">
                     {{if .HasArchive}}

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"golang.org/x/net/publicsuffix"
-	"golang.org/x/time/rate"
 	"gorm.io/gorm"
 
 	"wikikeeper-backend/internal/config"
@@ -20,16 +19,6 @@ import (
 )
 
 var siteinfoSchedulerLog = applogger.With("component", "siteinfo-scheduler")
-
-const (
-	maxDomainInflight    = 2
-	domainRequestsPerSec = 2
-)
-
-type domainThrottle struct {
-	limiter *rate.Limiter
-	slots   chan struct{}
-}
 
 func requestGroup(rawURL string) string {
 	parsed, err := url.Parse(rawURL)
@@ -56,7 +45,10 @@ type SiteInfoScheduler struct {
 	stopCh         chan struct{}
 	wg             sync.WaitGroup
 	mu             sync.Mutex
+	cancel         context.CancelFunc
 	running        bool
+	providerMu     sync.Mutex
+	providerGates  map[string]*providerGate
 }
 
 // NewSiteInfoScheduler creates a new siteinfo scheduler instance
@@ -68,7 +60,20 @@ func NewSiteInfoScheduler(db *gorm.DB, mwService *MediaWikiService, archiveServi
 		config:         cfg,
 		stopCh:         make(chan struct{}),
 		running:        false,
+		providerGates:  make(map[string]*providerGate),
 	}
+}
+
+func (s *SiteInfoScheduler) providerGateFor(rawURL string) (*providerGate, string) {
+	group := requestGroup(rawURL)
+	s.providerMu.Lock()
+	defer s.providerMu.Unlock()
+	if gate, ok := s.providerGates[group]; ok {
+		return gate, group
+	}
+	gate := newProviderGate()
+	s.providerGates[group] = gate
+	return gate, group
 }
 
 // Start begins periodic collection
@@ -81,14 +86,16 @@ func (s *SiteInfoScheduler) Start(ctx context.Context) {
 		return
 	}
 
+	runCtx, cancel := context.WithCancel(ctx)
+	s.cancel = cancel
 	s.running = true
 
 	siteinfoSchedulerLog.Info("siteinfo scheduler started")
 
 	// Start periodic collection
 	s.wg.Add(2)
-	go s.periodicRun(ctx)
-	go s.refreshExtensionStatsMaterializedView(ctx)
+	go s.periodicRun(runCtx)
+	go s.refreshExtensionStatsMaterializedView(runCtx)
 }
 
 func (s *SiteInfoScheduler) refreshExtensionStatsMaterializedView(ctx context.Context) {
@@ -121,18 +128,23 @@ func (s *SiteInfoScheduler) refreshExtensionStatsMaterializedView(ctx context.Co
 // Stop gracefully stops the scheduler
 func (s *SiteInfoScheduler) Stop() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if !s.running {
+		s.mu.Unlock()
 		return
 	}
 
 	siteinfoSchedulerLog.Info("stopping siteinfo scheduler")
 
+	if s.cancel != nil {
+		s.cancel()
+	}
 	close(s.stopCh)
+	s.mu.Unlock()
 	s.wg.Wait()
 
+	s.mu.Lock()
 	s.running = false
+	s.mu.Unlock()
 	siteinfoSchedulerLog.Info("siteinfo scheduler stopped")
 }
 
@@ -142,16 +154,9 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 
 	startTime := time.Now()
 
-	// Get active wikis that need collection
-	// Priority: NULL last_check_at first (never checked), then oldest last_check_at
+	// Get active wikis whose persisted collection schedule is due.
 	wikiRepo := repository.NewWikiRepository(s.db)
-	wikis, _, err := wikiRepo.List(ctx, repository.ListOptions{
-		Page:     1,
-		PageSize: int(s.config.SiteinfoCheckBatchSize),
-		Status:   nil, // Get all statuses
-		// Order by last_check_at ASC (NULL first, then oldest)
-		OrderBy: "last_check_at ASC NULLS FIRST",
-	})
+	wikis, err := wikiRepo.GetDueForUpdate(ctx, int(s.config.SiteinfoCheckBatchSize), time.Now())
 	if err != nil {
 		siteinfoSchedulerLog.Error("failed to get wikis", "error", err)
 		return
@@ -171,21 +176,6 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 	collector := NewCollectorService(s.db, s.mwService, s.config)
 
 	wg := sync.WaitGroup{}
-	throttleMu := sync.Mutex{}
-	throttles := make(map[string]*domainThrottle)
-	throttleFor := func(group string) *domainThrottle {
-		throttleMu.Lock()
-		defer throttleMu.Unlock()
-		if throttle, ok := throttles[group]; ok {
-			return throttle
-		}
-		throttle := &domainThrottle{
-			limiter: rate.NewLimiter(rate.Limit(domainRequestsPerSec), 1),
-			slots:   make(chan struct{}, maxDomainInflight),
-		}
-		throttles[group] = throttle
-		return throttle
-	}
 
 	for i, wiki := range wikis {
 		// Check if we should stop
@@ -201,41 +191,23 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 			continue
 		}
 
-		// Skip recently checked wikis
-		if wiki.LastCheckAt != nil {
-			timeSinceLastCheck := time.Since(*wiki.LastCheckAt)
-			backoffThreshold := 3 * 24 * time.Hour // 3 days
-
-			if timeSinceLastCheck < backoffThreshold {
-				siteinfoSchedulerLog.Info("skipping wiki, recent update detected",
-					"url", wiki.URL,
-					"last_check", wiki.LastCheckAt,
-					"since", timeSinceLastCheck)
-				continue
-			}
-		}
-
 		collect := func(wiki *models.Wiki, i int) {
 			defer wg.Done()
 
-			group := requestGroup(wiki.URL)
-			throttle := throttleFor(group)
-			if err := throttle.limiter.Wait(ctx); err != nil {
-				siteinfoSchedulerLog.Warn("request pacing interrupted", "group", group, "error", err)
-				return
-			}
-
-			select {
-			case throttle.slots <- struct{}{}:
-				defer func() { <-throttle.slots }()
-			case <-ctx.Done():
-				return
-			}
-
-			siteinfoSchedulerLog.Info("processing wiki", "index", i+1, "total", totalWikis, "url", wiki.URL, "request_group", group)
-
-			// Collect siteinfo
-			if err := collector.CollectSingleWiki(ctx, wiki.ID); err != nil {
+			gate, group := s.providerGateFor(wiki.URL)
+			attempted, err := gate.run(ctx, func() error {
+				siteinfoSchedulerLog.Info("processing wiki", "index", i+1, "total", totalWikis, "url", wiki.URL, "request_group", group)
+				return collector.CollectSingleWiki(ctx, wiki.ID)
+			})
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				if !attempted {
+					if _, rateLimited := asRateLimitError(err); rateLimited {
+						collector.UpdateWikiRateLimit(ctx, wiki.ID, err)
+					}
+				}
 				siteinfoSchedulerLog.Error("failed to collect wiki", "id", wiki.ID, "url", wiki.URL, "error", err)
 				errorCount.Add(1)
 				metrics.CollectionWikisFailed.Inc()
@@ -274,14 +246,8 @@ func (s *SiteInfoScheduler) periodicRun(ctx context.Context) {
 			siteinfoSchedulerLog.Info("context cancelled")
 			return
 		case <-ticker.C:
-			// Check the oldest last_check_at before running
 			wikiRepo := repository.NewWikiRepository(s.db)
-			wikis, _, err := wikiRepo.List(ctx, repository.ListOptions{
-				Page:     1,
-				PageSize: 1,
-				Status:   nil,
-				OrderBy:  "last_check_at ASC NULLS FIRST",
-			})
+			wikis, err := wikiRepo.GetDueForUpdate(ctx, 1, time.Now())
 			if err != nil {
 				siteinfoSchedulerLog.Error("failed to check wikis", "error", err)
 				ticker.Reset(time.Minute)
@@ -292,20 +258,6 @@ func (s *SiteInfoScheduler) periodicRun(ctx context.Context) {
 				siteinfoSchedulerLog.Info("no wikis found for checking", "sleep", time.Minute)
 				ticker.Reset(time.Minute)
 				continue
-			}
-
-			// Check if we need to back off
-			if wikis[0].LastCheckAt != nil {
-				timeSinceLastCheck := time.Since(*wikis[0].LastCheckAt)
-				backoffThreshold := 3 * 24 * time.Hour // 3 days
-
-				if timeSinceLastCheck < backoffThreshold {
-					siteinfoSchedulerLog.Info("backing off, recent update detected",
-						"last_check", wikis[0].LastCheckAt,
-						"since", timeSinceLastCheck)
-					ticker.Reset(time.Minute)
-					continue
-				}
 			}
 
 			ticker.Reset(time.Second)

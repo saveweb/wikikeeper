@@ -333,6 +333,9 @@ func (s *MediaWikiService) detectAPIURL(ctx context.Context, baseURL string) (ap
 	}
 	errMsg += ")"
 
+	if lastErr != nil {
+		return "", "", NewMediaWikiError("detect_api", baseURL, fmt.Errorf("%s: %w", errMsg, lastErr))
+	}
 	return "", "", NewMediaWikiError("detect_api", baseURL, errors.New(errMsg))
 }
 
@@ -373,41 +376,65 @@ func (s *MediaWikiService) checkRedirect(ctx context.Context, url string) (strin
 
 // detectSchemeUpgrade checks if the URL should be upgraded from http to https
 // Returns the normalized URL and whether a redirect occurred
-func (s *MediaWikiService) detectSchemeUpgrade(ctx context.Context, url string) (string, bool) {
+func (s *MediaWikiService) detectSchemeUpgrade(ctx context.Context, rawURL string) (string, bool) {
 	// Only check http URLs
-	if !strings.HasPrefix(url, "http://") {
-		return url, false
+	if !strings.HasPrefix(rawURL, "http://") {
+		return rawURL, false
 	}
 
-	// Try the https version directly
-	httpsURL := strings.Replace(url, "http://", "https://", 1)
-
-	// Test if https version is accessible
-	// Use a quick HEAD request to the root path
-	testURL := strings.TrimSuffix(httpsURL, "/") + "/"
+	// Inspect the HTTP endpoint's redirect without following it. The HTTPS
+	// landing page may itself return a WAF challenge, which is unrelated to API
+	// availability and must not prevent a scheme upgrade.
+	testURL := strings.TrimSuffix(rawURL, "/") + "/"
 	req, err := http.NewRequestWithContext(ctx, "HEAD", testURL, nil)
 	if err != nil {
-		return url, false
+		return rawURL, false
 	}
 
 	req.Header.Set("User-Agent", s.userAgent)
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	resp, err := client.Do(req)
 	if err != nil {
-		// HTTPS not available, stick with HTTP
-		return url, false
+		return rawURL, false
 	}
 	defer resp.Body.Close()
 
-	// If HTTPS responds successfully (even with redirect), upgrade
-	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
-		mediaWikiLog.Info("Scheme upgrade", "url", url, "https_url", httpsURL)
-		return httpsURL, true
+	if !isRedirectStatus(resp.StatusCode) {
+		return rawURL, false
+	}
+	location, err := resp.Location()
+	if err != nil || location.Scheme != "https" {
+		return rawURL, false
 	}
 
-	// HTTPS not available, stick with HTTP
-	return url, false
+	original, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL, false
+	}
+	original.Scheme = "https"
+	original.Host = location.Host
+	httpsURL := original.String()
+	mediaWikiLog.Info("Scheme upgrade", "url", rawURL, "https_url", httpsURL)
+	return httpsURL, true
+}
+
+func isRedirectStatus(status int) bool {
+	switch status {
+	case http.StatusMovedPermanently,
+		http.StatusFound,
+		http.StatusSeeOther,
+		http.StatusTemporaryRedirect,
+		http.StatusPermanentRedirect:
+		return true
+	default:
+		return false
+	}
 }
 
 // isSchemeOrHostRedirect checks if a redirect only changed the scheme or host (but not path)

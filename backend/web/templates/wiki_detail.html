@@ -10,6 +10,19 @@
         >
             {{.Wiki.Status}}
         </span>
+        {{if eq .Wiki.CollectionStatus "rate_limited"}}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+            collection: rate limited
+        </span>
+        {{else if eq .Wiki.CollectionStatus "error"}}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">
+            collection: error
+        </span>
+        {{else if eq .Wiki.CollectionStatus "pending"}}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+            collection: pending
+        </span>
+        {{end}}
     </div>
 
     {{if .Wiki.URL}}
@@ -248,6 +261,8 @@
         <div>Created: {{toa .Wiki.CreatedAt}}</div>
         <div>Updated: {{toa .Wiki.UpdatedAt}}</div>
         <div>Last Check: {{toa .Wiki.LastCheckAt}}</div>
+        <div>Last Success: {{toa .Wiki.LastSuccessAt}}</div>
+        <div>Next Check: {{toa .Wiki.NextCheckAt}}</div>
         <div>Archive Check: {{toa .Wiki.ArchiveLastCheckAt}}</div>
     </div>
 </div>

@@ -147,6 +147,21 @@ func (r *WikiRepository) GetPendingForUpdate(ctx context.Context, limit int) ([]
 	return wikis, nil
 }
 
+// GetDueForUpdate returns active wikis whose persisted collection schedule is due.
+func (r *WikiRepository) GetDueForUpdate(ctx context.Context, limit int, now time.Time) ([]*models.Wiki, error) {
+	var wikis []*models.Wiki
+	err := r.db.WithContext(ctx).
+		Where("is_active = ?", true).
+		Where("next_check_at IS NULL OR next_check_at <= ?", now).
+		Order("next_check_at ASC NULLS FIRST").
+		Limit(limit).
+		Find(&wikis).Error
+	if err != nil {
+		return nil, err
+	}
+	return wikis, nil
+}
+
 // ExistsByURL checks if a wiki with the given URL exists
 func (r *WikiRepository) ExistsByURL(ctx context.Context, url string) (bool, error) {
 	var count int64

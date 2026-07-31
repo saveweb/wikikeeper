@@ -35,8 +35,12 @@ func setupTestDB(t *testing.T) *gorm.DB {
 			status TEXT NOT NULL DEFAULT 'pending',
 			has_archive INTEGER NOT NULL DEFAULT 0,
 			api_available INTEGER NOT NULL DEFAULT 1,
+			collection_status TEXT NOT NULL DEFAULT 'pending',
 			last_error TEXT,
 			last_error_at DATETIME,
+			last_success_at DATETIME,
+			next_check_at DATETIME,
+			consecutive_failures INTEGER NOT NULL DEFAULT 0,
 			archive_last_check_at DATETIME,
 			archive_last_error TEXT,
 			archive_last_error_at DATETIME,
@@ -305,6 +309,34 @@ func TestWikiRepository_Update(t *testing.T) {
 	found, err := repo.GetByID(ctx, wiki.ID)
 	require.NoError(t, err)
 	assert.Equal(t, models.WikiStatusOK, found.Status)
+}
+
+func TestWikiRepository_GetDueForUpdate(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewWikiRepository(db)
+	ctx := context.Background()
+	now := time.Date(2026, time.July, 31, 5, 0, 0, 0, time.UTC)
+	past := now.Add(-time.Minute)
+	future := now.Add(time.Hour)
+
+	wikis := []*models.Wiki{
+		{ID: uuid.New(), URL: "https://never.example", Status: models.WikiStatusPending, CollectionStatus: models.CollectionStatusPending, IsActive: true},
+		{ID: uuid.New(), URL: "https://due.example", Status: models.WikiStatusOK, CollectionStatus: models.CollectionStatusOK, NextCheckAt: &past, IsActive: true},
+		{ID: uuid.New(), URL: "https://later.example", Status: models.WikiStatusOK, CollectionStatus: models.CollectionStatusOK, NextCheckAt: &future, IsActive: true},
+		{ID: uuid.New(), URL: "https://inactive.example", Status: models.WikiStatusPending, CollectionStatus: models.CollectionStatusPending, IsActive: false},
+	}
+	for _, wiki := range wikis {
+		require.NoError(t, repo.Create(ctx, wiki))
+	}
+	require.NoError(t, db.Model(&models.Wiki{}).
+		Where("id = ?", wikis[3].ID).
+		Update("is_active", false).Error)
+
+	due, err := repo.GetDueForUpdate(ctx, 10, now)
+	require.NoError(t, err)
+	require.Len(t, due, 2)
+	require.Equal(t, "https://never.example", due[0].URL)
+	require.Equal(t, "https://due.example", due[1].URL)
 }
 
 func TestWikiRepository_Delete(t *testing.T) {

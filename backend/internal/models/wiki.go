@@ -17,6 +17,17 @@ const (
 	WikiStatusOffline WikiStatus = "offline"
 )
 
+// CollectionStatus describes the latest collection attempt independently of
+// the last verified state of the wiki itself.
+type CollectionStatus string
+
+const (
+	CollectionStatusPending     CollectionStatus = "pending"
+	CollectionStatusOK          CollectionStatus = "ok"
+	CollectionStatusRateLimited CollectionStatus = "rate_limited"
+	CollectionStatusError       CollectionStatus = "error"
+)
+
 // Wiki represents a wiki site being tracked
 type Wiki struct {
 	ID       uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
@@ -36,11 +47,15 @@ type Wiki struct {
 	// Status and tracking
 	Status       WikiStatus `gorm:"type:varchar(20);not null;default:'pending';index" json:"status"`
 	HasArchive   bool       `gorm:"not null;default:false;index" json:"has_archive"`
-	APIAvailable bool       `gorm:"not null;default:true" json:"api_available"`
+	APIAvailable bool       `gorm:"not null;default:false" json:"api_available"`
 
-	// Error tracking (for siteinfo checks)
-	LastError   *string    `gorm:"type:text" json:"last_error"`
-	LastErrorAt *time.Time `json:"last_error_at,omitempty"`
+	// Collection tracking is separate from the last verified wiki status.
+	CollectionStatus    CollectionStatus `gorm:"type:varchar(20);not null;default:'pending';index" json:"collection_status"`
+	LastError           *string          `gorm:"type:text" json:"last_error"`
+	LastErrorAt         *time.Time       `json:"last_error_at,omitempty"`
+	LastSuccessAt       *time.Time       `gorm:"index" json:"last_success_at,omitempty"`
+	NextCheckAt         *time.Time       `gorm:"index" json:"next_check_at,omitempty"`
+	ConsecutiveFailures int              `gorm:"not null;default:0" json:"consecutive_failures"`
 
 	// Archive check status
 	ArchiveLastCheckAt *time.Time `gorm:"index" json:"archive_last_check_at,omitempty"`

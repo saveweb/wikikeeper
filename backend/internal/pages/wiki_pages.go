@@ -121,9 +121,10 @@ func (p *Pages) WikiAddSubmit(c echo.Context) error {
 
 	wikiName := c.FormValue("wiki_name")
 	wiki := &models.Wiki{
-		URL:      url,
-		Status:   models.WikiStatusPending,
-		IsActive: true,
+		URL:              url,
+		Status:           models.WikiStatusPending,
+		CollectionStatus: models.CollectionStatusPending,
+		IsActive:         true,
 	}
 	if wikiName != "" {
 		wiki.WikiName = &wikiName

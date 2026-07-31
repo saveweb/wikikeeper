@@ -36,16 +36,19 @@ func TestWikiJSONSerialization(t *testing.T) {
 	url := "https://example.com"
 
 	wiki := Wiki{
-		ID:              wikiID,
-		URL:             url,
-		WikiName:        &wikiName,
-		Sitename:        &sitename,
-		Status:          WikiStatusOK,
-		HasArchive:      true,
-		APIAvailable:    true,
-		CreatedAt:       now,
-		UpdatedAt:       now,
-		IsActive:        true,
+		ID:               wikiID,
+		URL:              url,
+		WikiName:         &wikiName,
+		Sitename:         &sitename,
+		Status:           WikiStatusOK,
+		CollectionStatus: CollectionStatusRateLimited,
+		HasArchive:       true,
+		APIAvailable:     true,
+		LastSuccessAt:    &now,
+		NextCheckAt:      &now,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		IsActive:         true,
 	}
 
 	// Test JSON marshaling
@@ -74,6 +77,10 @@ func TestWikiJSONSerialization(t *testing.T) {
 
 	if result["status"] != "ok" {
 		t.Errorf("Expected status ok, got %v", result["status"])
+	}
+
+	if result["collection_status"] != "rate_limited" {
+		t.Errorf("Expected collection_status rate_limited, got %v", result["collection_status"])
 	}
 
 	if result["has_archive"] != true {
