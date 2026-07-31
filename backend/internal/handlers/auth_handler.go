@@ -1,7 +1,12 @@
 package handlers
 
 import (
+	"bytes"
+	"crypto/subtle"
+	"html/template"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -14,57 +19,75 @@ type AuthHandler struct {
 	config *config.Config
 }
 
+var loginTemplate = template.Must(template.New("login").Parse(`<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin login - WikiKeeper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <main class="w-full max-w-sm">
+        <a href="/" class="block mb-6 text-center text-xl font-bold text-blue-600">WikiKeeper</a>
+        <form method="post" action="/login" class="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+            <h1 class="text-lg font-semibold text-gray-900 mb-5">Admin login</h1>
+            {{if .Error}}<p role="alert" class="mb-4 text-sm text-red-700">{{.Error}}</p>{{end}}
+            <input type="hidden" name="redirect_to" value="{{.RedirectTo}}">
+            <label for="token" class="block text-sm font-medium text-gray-700 mb-2">Admin token</label>
+            <input id="token" name="token" type="password" required autofocus autocomplete="current-password"
+                class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <button type="submit" class="mt-5 w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700">Login</button>
+        </form>
+    </main>
+</body>
+</html>`))
+
 // NewAuthHandler creates a new auth handler
 func NewAuthHandler(cfg *config.Config) *AuthHandler {
 	return &AuthHandler{config: cfg}
 }
 
-// CallbackRequest represents query parameters for auth callback
-type CallbackRequest struct {
-	Token      string `query:"token"`
-	RedirectTo string `query:"redirect_to"`
+func (h *AuthHandler) LoginPage(c echo.Context) error {
+	if h.config.AdminToken == "" {
+		return c.String(http.StatusServiceUnavailable, "Admin authentication is not configured")
+	}
+	return h.renderLogin(c, http.StatusOK, "", safeRedirect(c.QueryParam("redirect_to")))
 }
 
-// Callback handles GET /api/auth/callback
-// This endpoint is used for cross-domain cookie setting/clearing
-// Flow:
-// 1. Frontend redirects to API domain: https://api.example.com/api/auth/callback?token=xxx&redirect_to=xxx
-// 2a. If token is provided and valid: API sets cookie (same domain)
-// 2b. If token is empty: API clears cookie
-// 3. API redirects back to frontend
-func (h *AuthHandler) Callback(c echo.Context) error {
-	var req CallbackRequest
-	if err := c.Bind(&req); err != nil {
-		return c.String(http.StatusBadRequest, "Invalid request parameters")
-	}
-
-	// Validate token (if provided)
+func (h *AuthHandler) Login(c echo.Context) error {
 	if h.config.AdminToken == "" {
-		return c.String(http.StatusInternalServerError, "Admin authentication is not configured")
+		return c.String(http.StatusServiceUnavailable, "Admin authentication is not configured")
 	}
 
-	var cookie *http.Cookie
-
-	if req.Token != "" {
-		// Validate and set cookie
-		if req.Token != h.config.AdminToken {
-			return c.String(http.StatusUnauthorized, "Invalid token")
-		}
-
+	redirectTo := safeRedirect(c.FormValue("redirect_to"))
+	token := c.FormValue("token")
+	if subtle.ConstantTimeCompare([]byte(token), []byte(h.config.AdminToken)) != 1 {
+		return h.renderLogin(c, http.StatusUnauthorized, "Invalid admin token", redirectTo)
 	}
-	cookie = &http.Cookie{
+
+	c.SetCookie(&http.Cookie{
 		Name:     "admintoken",
-		Value:    req.Token,
+		Value:    token,
 		Path:     "/",
-		MaxAge:   int(30 * 24 * time.Hour / time.Second), // 30 days
+		MaxAge:   int((30 * 24 * time.Hour) / time.Second),
 		HttpOnly: true,
-		Secure:   c.Request().TLS != nil || c.Request().Header.Get("X-Forwarded-Proto") == "https",
-		SameSite: http.SameSiteNoneMode,
-	}
-	c.SetCookie(cookie)
+		Secure:   requestIsHTTPS(c.Request()),
+		SameSite: http.SameSiteLaxMode,
+	})
+	return c.Redirect(http.StatusSeeOther, redirectTo)
+}
 
-	// Redirect back to frontend
-	return c.HTML(http.StatusOK, `<html><head><meta http-equiv="refresh" content="0;url=`+req.RedirectTo+`"></head><body></body></html>`)
+func (h *AuthHandler) Logout(c echo.Context) error {
+	c.SetCookie(&http.Cookie{
+		Name:     "admintoken",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   requestIsHTTPS(c.Request()),
+		SameSite: http.SameSiteLaxMode,
+	})
+	return c.Redirect(http.StatusSeeOther, "/")
 }
 
 // Check handles GET /api/auth/check
@@ -88,4 +111,39 @@ func (h *AuthHandler) Check(c echo.Context) error {
 
 	isAuthenticated := cookie.Value == h.config.AdminToken
 	return c.JSON(http.StatusOK, map[string]bool{"authenticated": isAuthenticated})
+}
+
+func (h *AuthHandler) renderLogin(c echo.Context, status int, errorMessage, redirectTo string) error {
+	data := struct {
+		Error      string
+		RedirectTo string
+	}{errorMessage, redirectTo}
+	var body bytes.Buffer
+	if err := loginTemplate.Execute(&body, data); err != nil {
+		return err
+	}
+	return c.HTMLBlob(status, body.Bytes())
+}
+
+func safeRedirect(value string) string {
+	if value == "" {
+		return "/"
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return "/"
+	}
+	decodedPath, unescapeErr := url.PathUnescape(parsed.Path)
+	if unescapeErr != nil || !strings.HasPrefix(parsed.Path, "/") || strings.HasPrefix(parsed.Path, "//") || strings.Contains(decodedPath, `\`) || parsed.IsAbs() || parsed.Host != "" {
+		return "/"
+	}
+	return parsed.RequestURI()
+}
+
+func requestIsHTTPS(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	proto := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0])
+	return strings.EqualFold(proto, "https")
 }

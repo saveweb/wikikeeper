@@ -113,6 +113,9 @@ func main() {
 	e.POST("/wikis/:id/check-archive", pagesHandler.TriggerArchiveCheck)
 	e.GET("/extensions", pagesHandler.ExtensionList)
 	e.GET("/extensions/:name", pagesHandler.ExtensionDetail)
+	e.GET("/login", authHandler.LoginPage)
+	e.POST("/login", authHandler.Login)
+	e.POST("/logout", authHandler.Logout)
 
 	admin := e.Group("/admin")
 	admin.Use(appmiddleware.AdminAuth(cfg))
@@ -125,8 +128,6 @@ func main() {
 	// API routes
 	api := e.Group("/api")
 
-	// Auth callback endpoint (for cross-domain cookie setting)
-	api.GET("/auth/callback", authHandler.Callback)
 	// Auth check endpoint (for verifying authentication status)
 	api.GET("/auth/check", authHandler.Check)
 

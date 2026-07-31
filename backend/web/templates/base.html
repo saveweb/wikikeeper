@@ -87,12 +87,12 @@
                             class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium"
                             >Admin</span
                         >
+                        <form method="post" action="/logout">
+                            <button type="submit" class="text-xs text-gray-500 hover:text-gray-700">Logout</button>
+                        </form>
+                        {{else}}
+                        <a href="/login" class="text-xs text-gray-500 hover:text-gray-700">Login</a>
                         {{end}}
-                        <a
-                            href="/api/auth/callback?redirect_to=/"
-                            class="text-xs text-gray-500 hover:text-gray-700"
-                            >Login</a
-                        >
                         <a
                             href="https://github.com/saveweb/wikikeeper"
                             class="text-gray-400 hover:text-gray-600"
