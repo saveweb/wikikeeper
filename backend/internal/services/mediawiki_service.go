@@ -22,6 +22,21 @@ type MediaWikiService struct {
 	userAgent string
 }
 
+// HTTPStatusError preserves the response status so callers can distinguish
+// throttling from a missing or moved MediaWiki API.
+type HTTPStatusError struct {
+	StatusCode int
+	RetryAfter string
+	Body       string
+}
+
+func (e *HTTPStatusError) Error() string {
+	if e.RetryAfter != "" {
+		return fmt.Sprintf("HTTP %d (retry after %s): %s", e.StatusCode, e.RetryAfter, e.Body)
+	}
+	return fmt.Sprintf("HTTP %d: %s", e.StatusCode, e.Body)
+}
+
 // NewMediaWikiService creates a new MediaWiki service instance
 func NewMediaWikiService(timeout time.Duration, userAgent string) *MediaWikiService {
 	if userAgent == "" {
@@ -82,10 +97,10 @@ type SiteInfoExtensions struct {
 
 // ExtensionInfo represents a single extension or skin
 type ExtensionInfo struct {
-	Type       string  `json:"type"`        // "extension", "skin", "parserhook", etc.
-	Name       string  `json:"name"`
-	URL        *string `json:"url,omitempty"`
-	Version    *string `json:"version,omitempty"`
+	Type        string  `json:"type"` // "extension", "skin", "parserhook", etc.
+	Name        string  `json:"name"`
+	URL         *string `json:"url,omitempty"`
+	Version     *string `json:"version,omitempty"`
 	LicenseName *string `json:"license-name,omitempty"`
 }
 
@@ -441,7 +456,11 @@ func (s *MediaWikiService) makeRequest(ctx context.Context, url string) (*http.R
 		bodyStr = strings.ReplaceAll(bodyStr, "\n", " ")
 		bodyStr = strings.ReplaceAll(bodyStr, "\r", " ")
 		bodyStr = strings.TrimSpace(bodyStr)
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, bodyStr)
+		return nil, &HTTPStatusError{
+			StatusCode: resp.StatusCode,
+			RetryAfter: resp.Header.Get("Retry-After"),
+			Body:       bodyStr,
+		}
 	}
 
 	return resp, nil

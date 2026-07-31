@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"strings"
 	"time"
 
@@ -59,6 +61,12 @@ func (s *CollectorService) CollectSingleWiki(ctx context.Context, wikiID uuid.UU
 
 		// If fetch failed with existing API, try re-detecting
 		if err != nil {
+			var statusErr *HTTPStatusError
+			if errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusTooManyRequests {
+				s.UpdateWikiStatus(ctx, wikiID, models.WikiStatusError, err)
+				return NewCollectorError("fetch_siteinfo", err)
+			}
+
 			collectorLog.Info("Existing API failed, re-detecting", "err", err)
 			client, err = s.mwService.Initialize(ctx, wiki.URL)
 			if err != nil {

@@ -3,9 +3,13 @@ package services
 import (
 	"context"
 	"net/url"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"golang.org/x/net/publicsuffix"
+	"golang.org/x/time/rate"
 	"gorm.io/gorm"
 
 	"wikikeeper-backend/internal/config"
@@ -16,6 +20,32 @@ import (
 )
 
 var siteinfoSchedulerLog = applogger.With("component", "siteinfo-scheduler")
+
+const (
+	maxDomainInflight    = 2
+	domainRequestsPerSec = 2
+)
+
+type domainThrottle struct {
+	limiter *rate.Limiter
+	slots   chan struct{}
+}
+
+func requestGroup(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "default"
+	}
+
+	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
+	if host == "" {
+		return "default"
+	}
+	if domain, err := publicsuffix.EffectiveTLDPlusOne(host); err == nil {
+		return domain
+	}
+	return host
+}
 
 // SiteInfoScheduler manages periodic wiki siteinfo collection
 type SiteInfoScheduler struct {
@@ -135,14 +165,27 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 	}
 
 	// Process wikis with rate limiting
-	successCount := 0
-	errorCount := 0
+	var successCount atomic.Int64
+	var errorCount atomic.Int64
 
 	collector := NewCollectorService(s.db, s.mwService, s.config)
 
 	wg := sync.WaitGroup{}
-	lock := sync.Mutex{}
-	perHostInflight := make(map[string]int)
+	throttleMu := sync.Mutex{}
+	throttles := make(map[string]*domainThrottle)
+	throttleFor := func(group string) *domainThrottle {
+		throttleMu.Lock()
+		defer throttleMu.Unlock()
+		if throttle, ok := throttles[group]; ok {
+			return throttle
+		}
+		throttle := &domainThrottle{
+			limiter: rate.NewLimiter(rate.Limit(domainRequestsPerSec), 1),
+			slots:   make(chan struct{}, maxDomainInflight),
+		}
+		throttles[group] = throttle
+		return throttle
+	}
 
 	for i, wiki := range wikis {
 		// Check if we should stop
@@ -175,42 +218,29 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 		collect := func(wiki *models.Wiki, i int) {
 			defer wg.Done()
 
-			host := "default"
-			parsed, err := url.Parse(wiki.URL)
-			if err == nil || parsed.Host == "" {
-				host = parsed.Host
+			group := requestGroup(wiki.URL)
+			throttle := throttleFor(group)
+			if err := throttle.limiter.Wait(ctx); err != nil {
+				siteinfoSchedulerLog.Warn("request pacing interrupted", "group", group, "error", err)
+				return
 			}
 
-			defer func() {
-				// Release semaphore
-				lock.Lock()
-				perHostInflight[host]--
-				lock.Unlock()
-			}()
-
-			// Acquire semaphore for host
-			for {
-				lock.Lock()
-				inflight := perHostInflight[host]
-				if inflight < 3 { // Max 3 concurrent per host
-					perHostInflight[host] = inflight + 1
-					lock.Unlock()
-					break
-				}
-				lock.Unlock()
-				// Wait before retrying
-				time.Sleep(time.Second)
+			select {
+			case throttle.slots <- struct{}{}:
+				defer func() { <-throttle.slots }()
+			case <-ctx.Done():
+				return
 			}
 
-			siteinfoSchedulerLog.Info("processing wiki", "index", i+1, "total", totalWikis, "url", wiki.URL)
+			siteinfoSchedulerLog.Info("processing wiki", "index", i+1, "total", totalWikis, "url", wiki.URL, "request_group", group)
 
 			// Collect siteinfo
 			if err := collector.CollectSingleWiki(ctx, wiki.ID); err != nil {
 				siteinfoSchedulerLog.Error("failed to collect wiki", "id", wiki.ID, "url", wiki.URL, "error", err)
-				errorCount++
+				errorCount.Add(1)
 				metrics.CollectionWikisFailed.Inc()
 			} else {
-				successCount++
+				successCount.Add(1)
 			}
 			metrics.CollectionWikisProcessed.Inc()
 		}
@@ -218,13 +248,6 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 		go collect(wiki, i)
 	}
 	wg.Wait()
-	lock.Lock()
-	defer lock.Unlock()
-	for k, v := range perHostInflight {
-		if v > 0 {
-			panic("inflight not zero after wait: " + k)
-		}
-	}
 
 	// Update metrics
 	metrics.CollectionCycleTotal.Inc()
@@ -232,8 +255,8 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 
 	elapsed := time.Since(startTime)
 	siteinfoSchedulerLog.Info("collection cycle completed",
-		"success", successCount,
-		"errors", errorCount,
+		"success", successCount.Load(),
+		"errors", errorCount.Load(),
 		"duration", elapsed.Round(time.Second))
 }
 
