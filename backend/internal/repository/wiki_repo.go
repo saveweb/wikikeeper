@@ -165,7 +165,10 @@ func (r *WikiRepository) GetDueForUpdate(ctx context.Context, limit int, now tim
 // ExistsByURL checks if a wiki with the given URL exists
 func (r *WikiRepository) ExistsByURL(ctx context.Context, url string) (bool, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&models.Wiki{}).Where("url = ?", url).Count(&count).Error
+	baseURL := strings.TrimRight(url, "/")
+	err := r.db.WithContext(ctx).Model(&models.Wiki{}).
+		Where("url IN ?", []string{baseURL, baseURL + "/"}).
+		Count(&count).Error
 	return count > 0, err
 }
 

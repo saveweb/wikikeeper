@@ -105,13 +105,13 @@ func TestWikiRepository_Create(t *testing.T) {
 	wikiName := "Test Wiki"
 	sitename := "Test Site"
 	wiki := &models.Wiki{
-		ID:              uuid.New(),
-		URL:             "https://example.com",
-		WikiName:        &wikiName,
-		Sitename:        &sitename,
-		Status:          models.WikiStatusPending,
-		HasArchive:      false,
-		APIAvailable:    true,
+		ID:           uuid.New(),
+		URL:          "https://example.com",
+		WikiName:     &wikiName,
+		Sitename:     &sitename,
+		Status:       models.WikiStatusPending,
+		HasArchive:   false,
+		APIAvailable: true,
 	}
 
 	err := repo.Create(ctx, wiki)
@@ -160,7 +160,7 @@ func TestWikiRepository_GetByURL(t *testing.T) {
 	ctx := context.Background()
 
 	wiki := &models.Wiki{
-		ID: uuid.New(),
+		ID:     uuid.New(),
 		URL:    "https://example.com",
 		Status: models.WikiStatusOK,
 	}
@@ -178,10 +178,10 @@ func TestWikiRepository_GetByAPIURL(t *testing.T) {
 
 	apiURL := "https://example.com/api.php"
 	wiki := &models.Wiki{
-		ID: uuid.New(),
-		URL:     "https://example.com",
-		APIURL:  &apiURL,
-		Status:  models.WikiStatusOK,
+		ID:     uuid.New(),
+		URL:    "https://example.com",
+		APIURL: &apiURL,
+		Status: models.WikiStatusOK,
 	}
 	require.NoError(t, repo.Create(ctx, wiki))
 
@@ -199,7 +199,7 @@ func TestWikiRepository_List(t *testing.T) {
 	for i := 1; i <= 15; i++ {
 		sitename := fmt.Sprintf("Wiki %d", i)
 		wiki := &models.Wiki{
-		ID: uuid.New(),
+			ID:       uuid.New(),
 			URL:      fmt.Sprintf("https://wiki%d.com", i),
 			Sitename: &sitename,
 			Status:   models.WikiStatusOK,
@@ -294,7 +294,7 @@ func TestWikiRepository_Update(t *testing.T) {
 	ctx := context.Background()
 
 	wiki := &models.Wiki{
-		ID: uuid.New(),
+		ID:     uuid.New(),
 		URL:    "https://example.com",
 		Status: models.WikiStatusPending,
 	}
@@ -345,7 +345,7 @@ func TestWikiRepository_Delete(t *testing.T) {
 	ctx := context.Background()
 
 	wiki := &models.Wiki{
-		ID: uuid.New(),
+		ID:     uuid.New(),
 		URL:    "https://example.com",
 		Status: models.WikiStatusOK,
 	}
@@ -368,6 +368,10 @@ func TestWikiRepository_ExistsByURL(t *testing.T) {
 	repo.Create(ctx, &models.Wiki{URL: "https://example.com", Status: models.WikiStatusOK})
 
 	exists, err := repo.ExistsByURL(ctx, "https://example.com")
+	require.NoError(t, err)
+	assert.True(t, exists)
+
+	exists, err = repo.ExistsByURL(ctx, "https://example.com/")
 	require.NoError(t, err)
 	assert.True(t, exists)
 
