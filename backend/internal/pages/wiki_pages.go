@@ -106,22 +106,26 @@ func (p *Pages) WikiAdd(c echo.Context) error {
 }
 
 func (p *Pages) WikiAddSubmit(c echo.Context) error {
-	url := c.FormValue("url")
-	if url == "" {
+	rawURL := c.FormValue("url")
+	if rawURL == "" {
 		return c.HTML(http.StatusBadRequest, `<span class="text-red-600 text-sm">URL is required</span>`)
+	}
+	wikiURL := services.NormalizeURL(rawURL)
+	if wikiURL == "" {
+		return c.HTML(http.StatusBadRequest, `<span class="text-red-600 text-sm">Invalid wiki URL</span>`)
 	}
 
 	ctx := c.Request().Context()
 	wikiRepo := repository.NewWikiRepository(p.db)
 
-	exists, _ := wikiRepo.ExistsByURL(ctx, url)
+	exists, _ := wikiRepo.ExistsByURL(ctx, wikiURL)
 	if exists {
 		return c.HTML(http.StatusConflict, `<span class="text-red-600 text-sm">Wiki already exists</span>`)
 	}
 
 	wikiName := c.FormValue("wiki_name")
 	wiki := &models.Wiki{
-		URL:              url,
+		URL:              wikiURL,
 		Status:           models.WikiStatusPending,
 		CollectionStatus: models.CollectionStatusPending,
 		IsActive:         true,

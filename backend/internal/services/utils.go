@@ -5,28 +5,48 @@ import (
 	"strings"
 )
 
-// NormalizeURL normalizes a wiki URL by removing common paths and ensuring scheme
+// NormalizeURL reduces API, index, and article URLs to the MediaWiki base path.
 func NormalizeURL(rawURL string) string {
-	// Trim whitespace
 	rawURL = strings.TrimSpace(rawURL)
-
-	// Remove trailing slash
-	rawURL = strings.TrimSuffix(rawURL, "/")
-
-	// Remove common wiki paths
-	rawURL = strings.TrimSuffix(rawURL, "/wiki")
-	rawURL = strings.TrimSuffix(rawURL, "/w")
-	rawURL = strings.TrimSuffix(rawURL, "/index.php")
-
-	// Ensure scheme
+	if rawURL == "" {
+		return ""
+	}
 	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
 		rawURL = "https://" + rawURL
 	}
 
-	// Validate URL format
-	if _, err := url.Parse(rawURL); err != nil {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Hostname() == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 		return ""
 	}
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
 
-	return rawURL
+	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if len(segments) == 1 && segments[0] == "" {
+		segments = nil
+	}
+
+	for i, segment := range segments {
+		if strings.EqualFold(segment, "wiki") {
+			segments = segments[:i]
+			break
+		}
+	}
+	if len(segments) > 0 {
+		last := segments[len(segments)-1]
+		if strings.EqualFold(last, "api.php") || strings.EqualFold(last, "index.php") {
+			segments = segments[:len(segments)-1]
+		} else if strings.EqualFold(last, "w") || strings.EqualFold(last, "wiki") {
+			segments = segments[:len(segments)-1]
+		}
+	}
+
+	parsed.Path = ""
+	if len(segments) > 0 {
+		parsed.Path = "/" + strings.Join(segments, "/")
+	}
+	parsed.RawPath = ""
+
+	return strings.TrimSuffix(parsed.String(), "/")
 }

@@ -220,6 +220,10 @@ func TestNormalizeURL(t *testing.T) {
 		{"https://en.wikipedia.org/", "https://en.wikipedia.org"},
 		{"https://en.wikipedia.org/wiki", "https://en.wikipedia.org"},
 		{"https://en.wikipedia.org/w", "https://en.wikipedia.org"},
+		{"https://kafejkaminecraft.fandom.com/pl/", "https://kafejkaminecraft.fandom.com/pl"},
+		{"https://kafejkaminecraft.fandom.com/pl/api.php", "https://kafejkaminecraft.fandom.com/pl"},
+		{"https://kafejkaminecraft.fandom.com/pl/wiki/KafejkaMinecraft_Wiki", "https://kafejkaminecraft.fandom.com/pl"},
+		{"https://en.wikipedia.org/w/index.php?title=Main_Page", "https://en.wikipedia.org/w"},
 		{"en.wikipedia.org", "https://en.wikipedia.org"},
 		{"  https://en.wikipedia.org/  ", "https://en.wikipedia.org"},
 	}
@@ -228,6 +232,32 @@ func TestNormalizeURL(t *testing.T) {
 		t.Run(tc.input, func(t *testing.T) {
 			result := NormalizeURL(tc.input)
 			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestInitializeDetectsLocalizedMediaWikiPaths(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/pl/api.php" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"query":{"general":{"sitename":"KafejkaMinecraft Wiki"}}}`))
+	}))
+	defer server.Close()
+
+	service := NewMediaWikiService(time.Second, "WikiKeeper-Test/1.0")
+	for _, input := range []string{
+		server.URL + "/pl/",
+		server.URL + "/pl/api.php",
+		server.URL + "/pl/wiki/KafejkaMinecraft_Wiki",
+	} {
+		t.Run(input, func(t *testing.T) {
+			client, err := service.Initialize(context.Background(), input)
+			require.NoError(t, err)
+			require.Equal(t, server.URL+"/pl/api.php", *client.APIURL)
+			require.Equal(t, server.URL+"/pl/index.php", *client.IndexURL)
 		})
 	}
 }

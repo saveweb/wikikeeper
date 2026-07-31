@@ -121,8 +121,13 @@ type mediawikiResponse struct {
 func (s *MediaWikiService) Initialize(ctx context.Context, wikiURL string) (*MediaWikiClient, error) {
 	mediaWikiLog.Info("Initializing", "wiki_url", wikiURL)
 
+	normalizedURL := NormalizeURL(wikiURL)
+	if normalizedURL == "" {
+		return nil, NewMediaWikiError("normalize_url", wikiURL, ErrInvalidWikiURL)
+	}
+
 	// Try to detect if the base URL needs scheme upgrade (http -> https)
-	normalizedURL, wasRedirected := s.detectSchemeUpgrade(ctx, wikiURL)
+	normalizedURL, wasRedirected := s.detectSchemeUpgrade(ctx, normalizedURL)
 
 	// Detect API URL
 	apiURL, indexURL, err := s.detectAPIURL(ctx, normalizedURL)

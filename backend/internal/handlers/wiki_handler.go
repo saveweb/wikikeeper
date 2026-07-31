@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -140,16 +139,8 @@ func (h *WikiHandler) Create(c echo.Context) error {
 		apiURL = strings.TrimSuffix(rawURL, "/")
 		// Wiki URL is the API URL with /api.php removed
 		wikiURL = strings.TrimSuffix(apiURL, "/api.php")
-		// Add trailing slash to indicate it's a directory
-		if !strings.HasSuffix(wikiURL, "/") {
-			wikiURL = wikiURL + "/"
-		}
-		// Ensure scheme
-		if !strings.HasPrefix(wikiURL, "http://") && !strings.HasPrefix(wikiURL, "https://") {
-			wikiURL = "https://" + wikiURL
-		}
-		// Validate URL format
-		if _, err := url.Parse(wikiURL); err != nil {
+		wikiURL = services.NormalizeURL(wikiURL)
+		if wikiURL == "" {
 			return c.JSON(http.StatusBadRequest, map[string]string{"detail": "Invalid URL format"})
 		}
 	} else {
