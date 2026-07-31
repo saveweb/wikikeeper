@@ -23,6 +23,30 @@
     </div>
     {{end}}
 
+    {{with .Wiki.LastError}}
+    <section class="border border-red-200 bg-white rounded p-4">
+        <div class="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+            <h2 class="text-sm font-semibold text-red-700">Last Stats Error</h2>
+            {{with $.Wiki.LastErrorAt}}
+            <time class="text-xs text-gray-500">{{formatDate .}}</time>
+            {{end}}
+        </div>
+        <pre class="whitespace-pre-wrap break-words text-xs leading-5 text-gray-700 font-mono">{{toa .}}</pre>
+    </section>
+    {{end}}
+
+    {{with .Wiki.ArchiveLastError}}
+    <section class="border border-amber-200 bg-white rounded p-4">
+        <div class="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+            <h2 class="text-sm font-semibold text-amber-700">Last Archive Error</h2>
+            {{with $.Wiki.ArchiveLastErrorAt}}
+            <time class="text-xs text-gray-500">{{formatDate .}}</time>
+            {{end}}
+        </div>
+        <pre class="whitespace-pre-wrap break-words text-xs leading-5 text-gray-700 font-mono">{{toa .}}</pre>
+    </section>
+    {{end}}
+
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div class="text-xs font-medium text-gray-500">Language</div>

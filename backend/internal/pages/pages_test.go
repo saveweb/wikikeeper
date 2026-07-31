@@ -94,3 +94,45 @@ func TestStatsChartPointsAreChronological(t *testing.T) {
 		{"time":"2026-07-31T12:00:00Z","pages":20,"articles":10,"edits":30}
 	]`, string(encoded))
 }
+
+func TestWikiDetailRendersErrorsForPublicViewer(t *testing.T) {
+	statsError := `HTTP 429: <script>alert("not executable")</script>`
+	archiveError := "archive lookup timed out"
+	statsErrorAt := time.Date(2026, time.July, 31, 4, 25, 57, 0, time.UTC)
+	archiveErrorAt := statsErrorAt.Add(-time.Hour)
+
+	p := &Pages{
+		cfg:         &config.Config{LogLevel: "INFO"},
+		templateDir: "../../web/templates",
+	}
+	p.baseTemplates = p.parseBaseTemplates()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/wikis/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, p.render(c, "wiki_detail.html", M{
+		"Title":   "Wiki Detail",
+		"IsAdmin": false,
+		"Wiki": &models.Wiki{
+			ID:                 uuid.New(),
+			URL:                "https://example.fandom.com",
+			Status:             models.WikiStatusError,
+			LastError:          &statsError,
+			LastErrorAt:        &statsErrorAt,
+			ArchiveLastError:   &archiveError,
+			ArchiveLastErrorAt: &archiveErrorAt,
+		},
+	}))
+
+	body := rec.Body.String()
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, body, "Last Stats Error")
+	require.Contains(t, body, "Last Archive Error")
+	require.Contains(t, body, "HTTP 429")
+	require.Contains(t, body, "archive lookup timed out")
+	require.Contains(t, body, "2026-07-31 04:25")
+	require.Contains(t, body, `&lt;script&gt;alert(&#34;not executable&#34;)&lt;/script&gt;`)
+	require.NotContains(t, body, `<script>alert("not executable")</script>`)
+}
