@@ -339,6 +339,36 @@ func TestWikiRepository_GetDueForUpdate(t *testing.T) {
 	require.Equal(t, "https://due.example", due[1].URL)
 }
 
+func TestWikiRepository_DeferCollectionChecksOnlyChangesSchedule(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewWikiRepository(db)
+	ctx := context.Background()
+	lastError := "previous error"
+	lastCheck := time.Date(2026, time.July, 30, 5, 0, 0, 0, time.UTC)
+	nextCheck := lastCheck.Add(2 * time.Hour)
+	wiki := &models.Wiki{
+		ID:                  uuid.New(),
+		URL:                 "https://deferred.example",
+		Status:              models.WikiStatusOK,
+		CollectionStatus:    models.CollectionStatusError,
+		LastError:           &lastError,
+		LastCheckAt:         &lastCheck,
+		ConsecutiveFailures: 2,
+		IsActive:            true,
+	}
+	require.NoError(t, repo.Create(ctx, wiki))
+
+	require.NoError(t, repo.DeferCollectionChecks(ctx, []uuid.UUID{wiki.ID}, nextCheck))
+
+	updated, err := repo.GetByID(ctx, wiki.ID)
+	require.NoError(t, err)
+	require.Equal(t, models.CollectionStatusError, updated.CollectionStatus)
+	require.Equal(t, 2, updated.ConsecutiveFailures)
+	require.Equal(t, lastError, *updated.LastError)
+	require.Equal(t, lastCheck, *updated.LastCheckAt)
+	require.Equal(t, nextCheck, *updated.NextCheckAt)
+}
+
 func TestWikiRepository_Delete(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewWikiRepository(db)

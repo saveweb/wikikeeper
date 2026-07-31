@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/net/publicsuffix"
 	"gorm.io/gorm"
 
@@ -169,55 +170,83 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 		return
 	}
 
-	// Process wikis with rate limiting
+	// Process one serial queue per registrable domain. Different providers may
+	// run concurrently, but a provider never has multiple in-flight checks.
 	var successCount atomic.Int64
 	var errorCount atomic.Int64
+	var deferredCount atomic.Int64
 
 	collector := NewCollectorService(s.db, s.mwService, s.config)
-
-	wg := sync.WaitGroup{}
-
+	type queuedWiki struct {
+		wiki  *models.Wiki
+		index int
+	}
+	queues := make(map[string][]queuedWiki)
 	for i, wiki := range wikis {
-		// Check if we should stop
-		select {
-		case <-s.stopCh:
-			siteinfoSchedulerLog.Warn("collection cycle interrupted")
-			return
-		default:
-		}
-
-		// Skip inactive wikis
 		if !wiki.IsActive {
 			continue
 		}
+		group := requestGroup(wiki.URL)
+		queues[group] = append(queues[group], queuedWiki{wiki: wiki, index: i})
+	}
 
-		collect := func(wiki *models.Wiki, i int) {
+	wg := sync.WaitGroup{}
+	for group, queue := range queues {
+		group := group
+		queue := queue
+		wg.Add(1)
+		go func() {
 			defer wg.Done()
-
-			gate, group := s.providerGateFor(wiki.URL)
-			attempted, err := gate.run(ctx, func() error {
-				siteinfoSchedulerLog.Info("processing wiki", "index", i+1, "total", totalWikis, "url", wiki.URL, "request_group", group)
-				return collector.CollectSingleWiki(ctx, wiki.ID)
-			})
-			if err != nil {
+			gate, _ := s.providerGateFor(queue[0].wiki.URL)
+			for position, item := range queue {
 				if ctx.Err() != nil {
 					return
 				}
-				if !attempted {
-					if _, rateLimited := asRateLimitError(err); rateLimited {
-						collector.UpdateWikiRateLimit(ctx, wiki.ID, err)
+
+				attempted, err := gate.run(ctx, func() error {
+					siteinfoSchedulerLog.Info("processing wiki", "index", item.index+1, "total", totalWikis, "url", item.wiki.URL, "request_group", group)
+					return collector.CollectSingleWiki(ctx, item.wiki.ID)
+				})
+				if err != nil {
+					if ctx.Err() != nil {
+						return
 					}
+					if _, rateLimited := asRateLimitError(err); rateLimited {
+						start := position
+						if attempted {
+							errorCount.Add(1)
+							metrics.CollectionWikisFailed.Inc()
+							metrics.CollectionWikisProcessed.Inc()
+							start++
+						}
+						remainingIDs := make([]uuid.UUID, 0, len(queue)-start)
+						for _, remaining := range queue[start:] {
+							remainingIDs = append(remainingIDs, remaining.wiki.ID)
+						}
+						retryAt := gate.cooldownDeadline()
+						if len(remainingIDs) > 0 && !retryAt.IsZero() {
+							if deferErr := wikiRepo.DeferCollectionChecks(ctx, remainingIDs, retryAt); deferErr != nil {
+								siteinfoSchedulerLog.Error("failed to defer provider queue", "request_group", group, "count", len(remainingIDs), "error", deferErr)
+							} else {
+								deferredCount.Add(int64(len(remainingIDs)))
+							}
+						}
+						siteinfoSchedulerLog.Warn("provider rate limited; deferred remaining queue",
+							"request_group", group,
+							"attempted", attempted,
+							"deferred", len(remainingIDs),
+							"retry_at", retryAt)
+						return
+					}
+					siteinfoSchedulerLog.Error("failed to collect wiki", "id", item.wiki.ID, "url", item.wiki.URL, "error", err)
+					errorCount.Add(1)
+					metrics.CollectionWikisFailed.Inc()
+				} else {
+					successCount.Add(1)
 				}
-				siteinfoSchedulerLog.Error("failed to collect wiki", "id", wiki.ID, "url", wiki.URL, "error", err)
-				errorCount.Add(1)
-				metrics.CollectionWikisFailed.Inc()
-			} else {
-				successCount.Add(1)
+				metrics.CollectionWikisProcessed.Inc()
 			}
-			metrics.CollectionWikisProcessed.Inc()
-		}
-		wg.Add(1)
-		go collect(wiki, i)
+		}()
 	}
 	wg.Wait()
 
@@ -229,6 +258,7 @@ func (s *SiteInfoScheduler) run(ctx context.Context) {
 	siteinfoSchedulerLog.Info("collection cycle completed",
 		"success", successCount.Load(),
 		"errors", errorCount.Load(),
+		"deferred", deferredCount.Load(),
 		"duration", elapsed.Round(time.Second))
 }
 

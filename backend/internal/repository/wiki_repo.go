@@ -162,6 +162,17 @@ func (r *WikiRepository) GetDueForUpdate(ctx context.Context, limit int, now tim
 	return wikis, nil
 }
 
+// DeferCollectionChecks postpones queued checks without recording an attempt.
+func (r *WikiRepository) DeferCollectionChecks(ctx context.Context, ids []uuid.UUID, nextCheckAt time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).
+		Model(&models.Wiki{}).
+		Where("id IN ?", ids).
+		UpdateColumn("next_check_at", nextCheckAt).Error
+}
+
 // ExistsByURL checks if a wiki with the given URL exists
 func (r *WikiRepository) ExistsByURL(ctx context.Context, url string) (bool, error) {
 	var count int64

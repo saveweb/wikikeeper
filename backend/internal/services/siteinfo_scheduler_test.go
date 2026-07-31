@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"wikikeeper-backend/internal/config"
+	"wikikeeper-backend/internal/models"
 )
 
 func TestRequestGroupUsesRegistrableDomain(t *testing.T) {
@@ -41,6 +45,60 @@ func TestProviderGateIsSharedAcrossFandomSubdomains(t *testing.T) {
 	require.Same(t, first, second)
 }
 
+func TestSchedulerStopsProviderQueueAfterOneRateLimit(t *testing.T) {
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Retry-After", "60")
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	db := setupCollectorTestDB(t)
+	apiURL := server.URL + "/api.php"
+	indexURL := server.URL + "/index.php"
+	wikis := []*models.Wiki{
+		{ID: uuid.New(), URL: "https://one.fandom.com", APIURL: &apiURL, IndexURL: &indexURL, Status: models.WikiStatusOK, CollectionStatus: models.CollectionStatusOK, APIAvailable: true, IsActive: true},
+		{ID: uuid.New(), URL: "https://two.fandom.com", APIURL: &apiURL, IndexURL: &indexURL, Status: models.WikiStatusOK, CollectionStatus: models.CollectionStatusOK, APIAvailable: true, IsActive: true},
+		{ID: uuid.New(), URL: "https://three.fandom.com", APIURL: &apiURL, IndexURL: &indexURL, Status: models.WikiStatusOK, CollectionStatus: models.CollectionStatusOK, APIAvailable: true, IsActive: true},
+	}
+	for _, wiki := range wikis {
+		require.NoError(t, db.Create(wiki).Error)
+	}
+
+	scheduler := NewSiteInfoScheduler(
+		db,
+		NewMediaWikiService(time.Second, "WikiKeeper-Test/1.0"),
+		nil,
+		&config.Config{SiteinfoCheckBatchSize: 100},
+	)
+	scheduler.run(context.Background())
+
+	require.EqualValues(t, 1, requests.Load())
+	var attempted, deferred int
+	for _, wiki := range wikis {
+		var updated models.Wiki
+		require.NoError(t, db.First(&updated, "id = ?", wiki.ID).Error)
+		switch updated.CollectionStatus {
+		case models.CollectionStatusRateLimited:
+			attempted++
+			require.Equal(t, 1, updated.ConsecutiveFailures)
+			require.NotNil(t, updated.LastCheckAt)
+			require.NotNil(t, updated.LastError)
+		case models.CollectionStatusOK:
+			deferred++
+			require.Equal(t, 0, updated.ConsecutiveFailures)
+			require.Nil(t, updated.LastCheckAt)
+			require.Nil(t, updated.LastError)
+		default:
+			t.Fatalf("unexpected collection status %q", updated.CollectionStatus)
+		}
+		require.NotNil(t, updated.NextCheckAt)
+	}
+	require.Equal(t, 1, attempted)
+	require.Equal(t, 2, deferred)
+}
+
 func TestProviderGateHonorsRetryAfterAndRecovers(t *testing.T) {
 	now := time.Date(2026, time.July, 31, 5, 0, 0, 0, time.UTC)
 	var sleeps []time.Duration
@@ -62,6 +120,7 @@ func TestProviderGateHonorsRetryAfterAndRecovers(t *testing.T) {
 	attempted, err := gate.run(context.Background(), func() error { return rateLimitErr })
 	require.True(t, attempted)
 	require.ErrorIs(t, err, rateLimitErr)
+	require.Equal(t, gate.nextAllowed, gate.cooldownDeadline())
 
 	attempted, err = gate.run(context.Background(), func() error { return nil })
 	require.False(t, attempted)

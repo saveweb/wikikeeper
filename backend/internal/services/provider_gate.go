@@ -86,3 +86,12 @@ func (g *providerGate) run(ctx context.Context, collect func() error) (bool, err
 	}
 	return true, err
 }
+
+func (g *providerGate) cooldownDeadline() time.Time {
+	<-g.token
+	defer func() { g.token <- struct{}{} }()
+	if g.consecutiveRateLimits == 0 {
+		return time.Time{}
+	}
+	return g.nextAllowed
+}
