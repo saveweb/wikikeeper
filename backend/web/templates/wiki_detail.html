@@ -234,25 +234,57 @@
     (function() {
         const data = {{.StatsJSON}};
         if (!data || data.length === 0) return;
-        const labels = data.map(d => d.Time ? new Date(d.Time).toLocaleDateString() : '');
+
+        const series = (field) => data.map(point => ({
+            x: Date.parse(point.time),
+            y: point[field]
+        }));
+        const formatDate = (value) => new Intl.DateTimeFormat(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        }).format(new Date(Number(value)));
+        const formatDateTime = (value) => new Intl.DateTimeFormat(undefined, {
+            dateStyle: 'medium',
+            timeStyle: 'short'
+        }).format(new Date(Number(value)));
+
         new Chart(document.getElementById('stats-chart'), {
             type: 'line',
             data: {
-                labels: labels,
                 datasets: [
-                    { label: 'Pages', data: data.map(d => d.Pages), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: false, tension: 0.1 },
-                    { label: 'Articles', data: data.map(d => d.Articles), borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', fill: false, tension: 0.1 },
-                    { label: 'Edits', data: data.map(d => d.Edits), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', fill: false, tension: 0.1, yAxisID: 'y1' }
+                    { label: 'Pages', data: series('pages'), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: false, tension: 0.1 },
+                    { label: 'Articles', data: series('articles'), borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', fill: false, tension: 0.1 },
+                    { label: 'Edits', data: series('edits'), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', fill: false, tension: 0.1, yAxisID: 'y1' }
                 ]
             },
             options: {
                 responsive: true,
+                parsing: false,
+                normalized: true,
                 interaction: { mode: 'index', intersect: false },
                 scales: {
+                    x: {
+                        type: 'linear',
+                        bounds: 'data',
+                        title: { display: true, text: 'Date' },
+                        ticks: {
+                            autoSkip: true,
+                            maxTicksLimit: 8,
+                            callback: formatDate
+                        }
+                    },
                     y: { beginAtZero: true, title: { display: true, text: 'Pages / Articles' } },
                     y1: { position: 'right', beginAtZero: true, title: { display: true, text: 'Edits' }, grid: { drawOnChartArea: false } }
                 },
-                plugins: { legend: { position: 'top' } }
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            title: (items) => items.length ? formatDateTime(items[0].parsed.x) : ''
+                        }
+                    }
+                }
             }
         });
     })();

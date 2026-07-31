@@ -3,6 +3,7 @@ package pages
 import (
 	"context"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -14,6 +15,29 @@ import (
 	"wikikeeper-backend/internal/repository"
 	"wikikeeper-backend/internal/services"
 )
+
+type statsChartPoint struct {
+	Time     time.Time `json:"time"`
+	Pages    int       `json:"pages"`
+	Articles int       `json:"articles"`
+	Edits    int       `json:"edits"`
+}
+
+func statsChartPoints(stats []*models.WikiStats) []statsChartPoint {
+	points := make([]statsChartPoint, 0, len(stats))
+	for _, s := range stats {
+		points = append(points, statsChartPoint{
+			Time:     s.Time,
+			Pages:    s.Pages,
+			Articles: s.Articles,
+			Edits:    s.Edits,
+		})
+	}
+	slices.SortFunc(points, func(a, b statsChartPoint) int {
+		return a.Time.Compare(b.Time)
+	})
+	return points
+}
 
 func (p *Pages) WikiList(c echo.Context) error {
 	data := p.baseData(c, "Wikis")
@@ -140,22 +164,7 @@ func (p *Pages) WikiDetail(c echo.Context) error {
 
 	statsHistory, err := statsRepo.GetByWikiID(ctx, id, 365)
 	if err == nil && len(statsHistory) > 1 {
-		type chartPoint struct {
-			Time     time.Time `json:"time"`
-			Pages    int       `json:"Pages"`
-			Articles int       `json:"Articles"`
-			Edits    int       `json:"Edits"`
-		}
-		var points []chartPoint
-		for _, s := range statsHistory {
-			points = append(points, chartPoint{
-				Time:     s.Time,
-				Pages:    s.Pages,
-				Articles: s.Articles,
-				Edits:    s.Edits,
-			})
-		}
-		data["StatsJSON"] = toJS(points)
+		data["StatsJSON"] = toJS(statsChartPoints(statsHistory))
 	}
 
 	extRepo := repository.NewExtensionsRepository(p.db)

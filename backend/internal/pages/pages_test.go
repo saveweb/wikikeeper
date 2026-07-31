@@ -1,15 +1,19 @@
 package pages
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/require"
 
 	"wikikeeper-backend/internal/config"
+	"wikikeeper-backend/internal/models"
 )
 
 func TestRenderPartialLoadsPageTemplate(t *testing.T) {
@@ -67,4 +71,26 @@ func TestRenderPartialLoadsPageTemplate(t *testing.T) {
 			require.False(t, strings.Contains(rec.Body.String(), "<!doctype html>"))
 		})
 	}
+}
+
+func TestStatsChartPointsAreChronological(t *testing.T) {
+	wikiID := uuid.New()
+	newer := time.Date(2026, time.July, 31, 12, 0, 0, 0, time.UTC)
+	older := newer.Add(-48 * time.Hour)
+
+	points := statsChartPoints([]*models.WikiStats{
+		{WikiID: wikiID, Time: newer, Pages: 20, Articles: 10, Edits: 30},
+		{WikiID: wikiID, Time: older, Pages: 15, Articles: 8, Edits: 25},
+	})
+
+	require.Len(t, points, 2)
+	require.Equal(t, older, points[0].Time)
+	require.Equal(t, newer, points[1].Time)
+
+	encoded, err := json.Marshal(points)
+	require.NoError(t, err)
+	require.JSONEq(t, `[
+		{"time":"2026-07-29T12:00:00Z","pages":15,"articles":8,"edits":25},
+		{"time":"2026-07-31T12:00:00Z","pages":20,"articles":10,"edits":30}
+	]`, string(encoded))
 }
