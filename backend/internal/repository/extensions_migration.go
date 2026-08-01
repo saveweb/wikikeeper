@@ -26,7 +26,10 @@ func (r *ExtensionsRepository) BackfillExtensionSets(ctx context.Context, batchS
 		var snapshots []models.WikiExtensionsSnapshot
 		if err := tx.Select("id").
 			Where("extension_set_id IS NULL").
-			Order("id").
+			// Snapshot creation time tracks the physical insertion order of legacy
+			// members. Keeping each batch local avoids random reads across the
+			// 100+ GB legacy table.
+			Order("snapshot_at, id").
 			Limit(batchSize).
 			Find(&snapshots).Error; err != nil {
 			return err
