@@ -283,6 +283,7 @@ func (r *WikiRepository) ExistsByAPIURL(ctx context.Context, apiURL string) (boo
 type Summary struct {
 	TotalWikis       int64
 	ArchivedWikis    int64
+	ArchivedSize     int64
 	StatusOKWikis    int64
 	StatusErrorWikis int64
 	ActiveWikis      int64
@@ -309,6 +310,7 @@ func (r *WikiRepository) GetSummaryStats(ctx context.Context, bypassCache bool) 
 			return map[string]int64{
 				"total_wikis":        cached.TotalWikis,
 				"archived_wikis":     cached.ArchivedWikis,
+				"archived_size":      cached.ArchivedSize,
 				"status_ok_wikis":    cached.StatusOKWikis,
 				"status_error_wikis": cached.StatusErrorWikis,
 				"active_wikis":       cached.ActiveWikis,
@@ -323,6 +325,14 @@ func (r *WikiRepository) GetSummaryStats(ctx context.Context, bypassCache bool) 
 		SELECT
 			COUNT(*) as total_wikis,
 			COUNT(*) FILTER (WHERE has_archive = true) as archived_wikis,
+			(
+				SELECT COALESCE(SUM(item_size), 0)
+				FROM (
+					SELECT MAX(item_size) AS item_size
+					FROM wiki_archives
+					GROUP BY ia_identifier
+				) ia_items
+			) as archived_size,
 			COUNT(*) FILTER (WHERE status = 'ok') as status_ok_wikis,
 			COUNT(*) FILTER (WHERE status = 'error') as status_error_wikis,
 			COUNT(*) FILTER (WHERE is_active = true) as active_wikis,
@@ -350,10 +360,12 @@ func (r *WikiRepository) GetSummaryStats(ctx context.Context, bypassCache bool) 
 	if err != nil {
 		return nil, err
 	}
+	summaryCache.Set(true, &result, ttlcache.DefaultTTL)
 
 	return map[string]int64{
 		"total_wikis":        result.TotalWikis,
 		"archived_wikis":     result.ArchivedWikis,
+		"archived_size":      result.ArchivedSize,
 		"status_ok_wikis":    result.StatusOKWikis,
 		"status_error_wikis": result.StatusErrorWikis,
 		"active_wikis":       result.ActiveWikis,

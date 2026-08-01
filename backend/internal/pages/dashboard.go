@@ -16,6 +16,7 @@ func (p *Pages) Dashboard(c echo.Context) error {
 		data["Stats"] = map[string]any{
 			"TotalWikis":       stats["total_wikis"],
 			"ArchivedWikis":    stats["archived_wikis"],
+			"ArchivedSize":     stats["archived_size"],
 			"StatusOkWikis":    stats["status_ok_wikis"],
 			"StatusErrorWikis": stats["status_error_wikis"],
 			"ActiveWikis":      stats["active_wikis"],

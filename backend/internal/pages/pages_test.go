@@ -122,6 +122,27 @@ func TestDashboardMissingWikiNameUsesLinkedHostname(t *testing.T) {
 	require.Contains(t, body, `src="/api/wikis/`+wikiID.String()+`/thumbnail"`)
 }
 
+func TestDashboardFormatsArchivedSize(t *testing.T) {
+	p := &Pages{
+		cfg:         &config.Config{LogLevel: "INFO"},
+		templateDir: "../../web/templates",
+	}
+	p.baseTemplates = p.parseBaseTemplates()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, p.render(c, "dashboard.html", M{
+		"Stats": map[string]any{"ArchivedSize": int64(3 * 1024 * 1024 * 1024 / 2)},
+	}))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "Archived Size")
+	require.Contains(t, rec.Body.String(), "1.5 GiB")
+}
+
 func TestWikiListRendersThumbnail(t *testing.T) {
 	wikiID := uuid.New()
 	p := &Pages{
