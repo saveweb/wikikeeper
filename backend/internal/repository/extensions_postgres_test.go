@@ -82,10 +82,35 @@ func TestExtensionSetMigrationPostgres(t *testing.T) {
 		INSERT INTO wiki_extension_items(snapshot_id, ext_type, name)
 		VALUES (?, 'other', ?)
 	`, legacySnapshotID, "Legacy-"+marker).Error)
+	interleavedIDs := []uuid.UUID{uuid.New(), uuid.New()}
+	for i, snapshotID := range interleavedIDs {
+		wikiID := uuid.New()
+		require.NoError(t, db.Create(&models.Wiki{
+			ID: wikiID, URL: fmt.Sprintf("https://interleaved-%d-%s.example.org", i, marker),
+			Status: models.WikiStatusOK, IsActive: true,
+		}).Error)
+		require.NoError(t, db.Exec(`
+			INSERT INTO wiki_extensions_snapshots(id, wiki_id, snapshot_at)
+			VALUES (?, ?, NOW())
+		`, snapshotID, wikiID).Error)
+	}
+	require.NoError(t, db.Exec(`
+		INSERT INTO wiki_extension_items(snapshot_id, ext_type, name)
+		SELECT CASE WHEN number % 2 = 0 THEN ?::uuid ELSE ?::uuid END,
+		       'other', 'Interleaved-' || ((number + 1) / 2)::text
+		FROM generate_series(1, 600) AS number
+	`, interleavedIDs[0], interleavedIDs[1]).Error)
 
-	result, err := repo.BackfillExtensionSets(ctx, 100)
-	require.NoError(t, err)
-	require.GreaterOrEqual(t, result.Snapshots, 1)
+	var migrated int
+	for range 20 {
+		result, err := repo.BackfillExtensionSets(ctx, 1)
+		require.NoError(t, err)
+		migrated += result.Snapshots
+		if result.Snapshots == 0 && result.Items == 0 {
+			break
+		}
+	}
+	require.GreaterOrEqual(t, migrated, 3)
 	remaining, err := repo.RemainingLegacyExtensionSnapshots(ctx)
 	require.NoError(t, err)
 	require.Zero(t, remaining)

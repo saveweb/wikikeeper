@@ -42,7 +42,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		if result.Snapshots == 0 {
+		if result.Snapshots == 0 && result.Items == 0 {
 			break
 		}
 		migrated += int64(result.Snapshots)

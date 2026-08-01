@@ -62,6 +62,10 @@ var migrations = []Migration{
 		Version: 10,
 		Name:    "content_address_extension_sets",
 	},
+	{
+		Version: 11,
+		Name:    "extension_backfill_cursor",
+	},
 }
 
 // RunMigrations executes all pending migrations

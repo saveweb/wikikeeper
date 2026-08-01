@@ -122,4 +122,10 @@ func TestCollectionStateMigrationPostgres(t *testing.T) {
 	var legacyWrites bool
 	require.NoError(t, db.Raw(`SELECT legacy_writes FROM extension_storage_state WHERE singleton`).Scan(&legacyWrites).Error)
 	require.True(t, legacyWrites)
+	up, err = readMigrationFile(11, "up")
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(up).Error)
+	var cursor int64
+	require.NoError(t, db.Raw(`SELECT backfill_cursor FROM extension_storage_state WHERE singleton`).Scan(&cursor).Error)
+	require.Zero(t, cursor)
 }

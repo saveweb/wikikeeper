@@ -64,3 +64,10 @@ func TestContentAddressExtensionSetsMigrationIsRegistered(t *testing.T) {
 		require.Contains(t, up, fragment)
 	}
 }
+
+func TestExtensionBackfillCursorMigrationIsRegistered(t *testing.T) {
+	require.Equal(t, "extension_backfill_cursor", getMigrationName(11))
+	up, err := readMigrationFile(11, "up")
+	require.NoError(t, err)
+	require.Contains(t, up, "backfill_cursor BIGINT NOT NULL DEFAULT 0")
+}

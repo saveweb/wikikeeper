@@ -20,7 +20,13 @@ func (r *ExtensionsRepository) BackfillExtensionSets(ctx context.Context, batchS
 	if batchSize < 1 {
 		return ExtensionSetBackfillResult{}, fmt.Errorf("batch size must be positive")
 	}
+	if r.db.Dialector.Name() == "postgres" {
+		return r.backfillExtensionSetsSequential(ctx, batchSize)
+	}
+	return r.backfillExtensionSetsBySnapshot(ctx, batchSize)
+}
 
+func (r *ExtensionsRepository) backfillExtensionSetsBySnapshot(ctx context.Context, batchSize int) (ExtensionSetBackfillResult, error) {
 	result := ExtensionSetBackfillResult{}
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var snapshots []models.WikiExtensionsSnapshot
@@ -75,6 +81,120 @@ func (r *ExtensionsRepository) BackfillExtensionSets(ctx context.Context, batchS
 		return nil
 	})
 	return result, err
+}
+
+func (r *ExtensionsRepository) backfillExtensionSetsSequential(ctx context.Context, batchSize int) (ExtensionSetBackfillResult, error) {
+	result := ExtensionSetBackfillResult{}
+	itemLimit := batchSize * 256
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var cursor int64
+		if err := tx.Raw(`
+			SELECT backfill_cursor
+			FROM extension_storage_state
+			WHERE singleton = TRUE
+			FOR UPDATE
+		`).Scan(&cursor).Error; err != nil {
+			return err
+		}
+
+		var window []models.WikiExtensionItem
+		if err := tx.Select("id", "snapshot_id").Where("id > ?", cursor).
+			Order("id").Limit(itemLimit).Find(&window).Error; err != nil {
+			return err
+		}
+		if len(window) == 0 {
+			return r.backfillEmptyExtensionSets(tx, batchSize, &result)
+		}
+
+		order := make([]uuid.UUID, 0, batchSize)
+		seen := make(map[uuid.UUID]bool, batchSize)
+		for _, item := range window {
+			if !seen[item.SnapshotID] {
+				seen[item.SnapshotID] = true
+				order = append(order, item.SnapshotID)
+			}
+		}
+
+		// Snapshots can interleave when collectors insert concurrently. Fetch
+		// complete snapshots after discovering them from the sequential window.
+		var processItems []models.WikiExtensionItem
+		if err := tx.Where("snapshot_id IN ?", order).
+			Order("snapshot_id, ext_type, name").Find(&processItems).Error; err != nil {
+			return err
+		}
+		itemsBySnapshot := make(map[uuid.UUID][]models.WikiExtensionItem, len(order))
+		for _, item := range processItems {
+			itemsBySnapshot[item.SnapshotID] = append(itemsBySnapshot[item.SnapshotID], item)
+		}
+
+		type snapshotState struct {
+			ID             uuid.UUID
+			ExtensionSetID *int64
+		}
+		var states []snapshotState
+		if err := tx.Model(&models.WikiExtensionsSnapshot{}).
+			Select("id", "extension_set_id").Where("id IN ?", order).Find(&states).Error; err != nil {
+			return err
+		}
+		needsBackfill := make(map[uuid.UUID]bool, len(states))
+		for _, state := range states {
+			needsBackfill[state.ID] = state.ExtensionSetID == nil
+		}
+
+		updates := make(map[int64][]uuid.UUID)
+		for _, snapshotID := range order {
+			if !needsBackfill[snapshotID] {
+				continue
+			}
+			setID, err := ensureExtensionSet(tx, itemsBySnapshot[snapshotID])
+			if err != nil {
+				return fmt.Errorf("snapshot %s: %w", snapshotID, err)
+			}
+			updates[setID] = append(updates[setID], snapshotID)
+			result.Snapshots++
+		}
+		for setID, snapshotIDs := range updates {
+			if err := tx.Model(&models.WikiExtensionsSnapshot{}).
+				Where("id IN ? AND extension_set_id IS NULL", snapshotIDs).
+				UpdateColumn("extension_set_id", setID).Error; err != nil {
+				return err
+			}
+		}
+
+		result.Items = len(processItems)
+		cursor = window[len(window)-1].ID
+		return tx.Exec(`
+			UPDATE extension_storage_state
+			SET backfill_cursor = ?, updated_at = NOW()
+			WHERE singleton = TRUE
+		`, cursor).Error
+	})
+	return result, err
+}
+
+func (r *ExtensionsRepository) backfillEmptyExtensionSets(tx *gorm.DB, batchSize int, result *ExtensionSetBackfillResult) error {
+	var snapshots []models.WikiExtensionsSnapshot
+	if err := tx.Select("id").Where("extension_set_id IS NULL").Order("snapshot_at, id").Limit(batchSize).Find(&snapshots).Error; err != nil {
+		return err
+	}
+	if len(snapshots) == 0 {
+		return nil
+	}
+	setID, err := ensureExtensionSet(tx, nil)
+	if err != nil {
+		return err
+	}
+	ids := make([]uuid.UUID, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		ids = append(ids, snapshot.ID)
+	}
+	if err := tx.Model(&models.WikiExtensionsSnapshot{}).
+		Where("id IN ? AND extension_set_id IS NULL", ids).
+		UpdateColumn("extension_set_id", setID).Error; err != nil {
+		return err
+	}
+	result.Snapshots = len(ids)
+	return nil
 }
 
 func (r *ExtensionsRepository) RemainingLegacyExtensionSnapshots(ctx context.Context) (int64, error) {
