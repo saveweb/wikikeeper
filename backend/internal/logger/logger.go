@@ -34,13 +34,21 @@ func Init(level string) {
 
 	// Create logger with JSON handler for production
 	opts := &slog.HandlerOptions{
-		Level: slogLevel,
+		Level:       slogLevel,
+		ReplaceAttr: utcTimeAttr,
 	}
 
 	Log = slog.New(slog.NewTextHandler(os.Stdout, opts))
 
 	// Set default logger
 	slog.SetDefault(Log)
+}
+
+func utcTimeAttr(_ []string, attr slog.Attr) slog.Attr {
+	if attr.Key == slog.TimeKey {
+		return slog.Time(slog.TimeKey, attr.Value.Time().UTC())
+	}
+	return attr
 }
 
 // With returns a new logger with default attributes

@@ -199,7 +199,7 @@ func (s *ArchiveService) CollectArchives(ctx context.Context, db *gorm.DB, wikiI
 // updateWikiArchiveStatus updates the has_archive field for a wiki
 func (s *ArchiveService) updateWikiArchiveStatus(ctx context.Context, db *gorm.DB, wikiID uuid.UUID, hasArchive bool) {
 	wikiRepo := repository.NewWikiRepository(db)
-	now := time.Now()
+	now := time.Now().UTC()
 	if err := wikiRepo.UpdateArchiveStatus(ctx, wikiID, hasArchive, now); err != nil {
 		archiveLog.Info("Failed to update wiki has_archive status", "err", err)
 	}
@@ -208,7 +208,7 @@ func (s *ArchiveService) updateWikiArchiveStatus(ctx context.Context, db *gorm.D
 // UpdateWikiArchiveError records an archive check error (exported for handler use)
 func (s *ArchiveService) UpdateWikiArchiveError(ctx context.Context, db *gorm.DB, wikiID uuid.UUID, err error) {
 	wikiRepo := repository.NewWikiRepository(db)
-	now := time.Now()
+	now := time.Now().UTC()
 	errMsg := err.Error()
 	if updateErr := wikiRepo.UpdateArchiveError(ctx, wikiID, errMsg, now); updateErr != nil {
 		archiveLog.Info("Failed to update wiki archive error", "err", updateErr)
@@ -335,6 +335,7 @@ func (s *ArchiveService) parseArchiveItem(ctx context.Context, result archiveSea
 
 		for _, format := range formats {
 			if t, err := time.Parse(format, result.AddedDate); err == nil {
+				t = t.UTC()
 				info.AddedDate = &t
 				break
 			}
@@ -405,6 +406,7 @@ func (s *ArchiveService) parseArchiveItem(ctx context.Context, result archiveSea
 	re := regexp.MustCompile(`-(\d{8})$`)
 	if matches := re.FindStringSubmatch(result.Identifier); len(matches) > 1 {
 		if t, err := time.Parse("20060102", matches[1]); err == nil {
+			t = t.UTC()
 			info.DumpDate = &t
 		}
 	}

@@ -66,6 +66,10 @@ var migrations = []Migration{
 		Version: 11,
 		Name:    "extension_backfill_cursor",
 	},
+	{
+		Version: 12,
+		Name:    "normalize_timestamps_to_utc",
+	},
 }
 
 // RunMigrations executes all pending migrations
@@ -101,14 +105,19 @@ func RunMigrations(db *gorm.DB) error {
 			return fmt.Errorf("failed to read migration up file: %w", err)
 		}
 
-		// Execute migration
-		if err := db.Exec(upSQL).Error; err != nil {
-			return fmt.Errorf("failed to execute migration %d: %w", migration.Version, err)
-		}
-
-		// Record migration
-		if err := recordMigration(db, migration.Version, migration.Name); err != nil {
-			return fmt.Errorf("failed to record migration: %w", err)
+		if err := db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Exec("SET LOCAL TIME ZONE 'UTC'").Error; err != nil {
+				return fmt.Errorf("set migration timezone: %w", err)
+			}
+			if err := tx.Exec(upSQL).Error; err != nil {
+				return fmt.Errorf("execute migration: %w", err)
+			}
+			if err := recordMigration(tx, migration.Version, migration.Name); err != nil {
+				return fmt.Errorf("record migration: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("failed to apply migration %d: %w", migration.Version, err)
 		}
 
 		applogger.Log.Info("migration completed", "version", migration.Version, "name", migration.Name)
@@ -123,7 +132,7 @@ func createMigrationsTable(db *gorm.DB) error {
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version INT PRIMARY KEY,
 			name VARCHAR(255) NOT NULL,
-			applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			applied_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		);
 	`
 	return db.Exec(sql).Error

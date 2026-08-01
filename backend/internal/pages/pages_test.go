@@ -84,6 +84,15 @@ func TestWikiLabelFallsBackToHostname(t *testing.T) {
 	require.Equal(t, "alacity.miraheze.org", wikiLabel(nil, nil, "alacity.miraheze.org/w/"))
 }
 
+func TestTimeFormattingAlwaysUsesUTC(t *testing.T) {
+	paris := time.FixedZone("CEST", 2*60*60)
+	value := time.Date(2026, time.July, 31, 14, 25, 57, 0, paris)
+
+	require.Equal(t, "2026-07-31 12:25 UTC", formatDate(value))
+	require.Equal(t, "2026-07-31T12:25:57Z", toa(value))
+	require.Equal(t, "2026-07-31T12:25:57Z", toa(&value))
+}
+
 func TestDashboardMissingWikiNameUsesLinkedHostname(t *testing.T) {
 	wikiID := uuid.New()
 	p := &Pages{
@@ -202,7 +211,8 @@ func TestWikiDetailRendersErrorsForPublicViewer(t *testing.T) {
 	require.Contains(t, body, `/thumbnail`)
 	require.Contains(t, body, "HTTP 429")
 	require.Contains(t, body, "archive lookup timed out")
-	require.Contains(t, body, "2026-07-31 04:25")
+	require.Contains(t, body, "2026-07-31 04:25 UTC")
+	require.Contains(t, body, `datetime="2026-07-31T04:25:57Z"`)
 	require.Contains(t, body, `&lt;script&gt;alert(&#34;not executable&#34;)&lt;/script&gt;`)
 	require.NotContains(t, body, `<script>alert("not executable")</script>`)
 }
@@ -247,11 +257,11 @@ func TestWikiDetailRendersExtensionSnapshotHistory(t *testing.T) {
 	body := rec.Body.String()
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, body, "Extensions History")
-	require.Contains(t, body, "Snapshot 2026-07-31 12:00")
+	require.Contains(t, body, "Snapshot 2026-07-31 12:00 UTC")
 	require.Contains(t, body, "MediaWiki 1.46.0")
 	require.Contains(t, body, "MediaWiki 1.45.1")
 	require.Contains(t, body, "Current")
-	require.Contains(t, body, "Until 2026-07-31 12:00")
+	require.Contains(t, body, "Until 2026-07-31 12:00 UTC")
 	require.Contains(t, body, "VisualEditor")
 	require.Contains(t, body, "WikiEditor")
 }

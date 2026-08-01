@@ -27,7 +27,7 @@ func statsChartPoints(stats []*models.WikiStats) []statsChartPoint {
 	points := make([]statsChartPoint, 0, len(stats))
 	for _, s := range stats {
 		points = append(points, statsChartPoint{
-			Time:     s.Time,
+			Time:     s.Time.UTC(),
 			Pages:    s.Pages,
 			Articles: s.Articles,
 			Edits:    s.Edits,
@@ -177,7 +177,7 @@ func (p *Pages) WikiDetail(c echo.Context) error {
 	if err == nil && extSnapshot != nil {
 		data["Extensions"] = extSnapshot
 	}
-	now := time.Now()
+	now := time.Now().UTC()
 	extensionHistory, err := extRepo.GetSnapshotsInTimeRange(ctx, id, now.AddDate(-1, 0, 0), now)
 	if err == nil && len(extensionHistory) > 1 {
 		data["ExtensionHistory"] = extensionHistory

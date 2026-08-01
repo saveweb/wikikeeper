@@ -28,6 +28,7 @@ const (
 )
 
 func markWikiCollectionSuccess(wiki *models.Wiki, now time.Time) {
+	now = now.UTC()
 	wiki.APIAvailable = true
 	wiki.LastCheckAt = &now
 	wiki.LastSuccessAt = &now
@@ -162,7 +163,7 @@ func (s *CollectorService) collectWiki(ctx context.Context, wiki *models.Wiki) e
 	}
 
 	// Update wiki with siteinfo
-	now := time.Now()
+	now := time.Now().UTC()
 	wiki.Sitename = &siteinfo.General.Sitename
 	wiki.Lang = &siteinfo.General.Lang
 	wiki.DBType = &siteinfo.General.DBType
@@ -283,7 +284,7 @@ func (s *CollectorService) UpdateWikiStatus(ctx context.Context, wikiID uuid.UUI
 		return
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	wiki.CollectionStatus = models.CollectionStatusError
 	wiki.LastCheckAt = &now
 	wiki.ConsecutiveFailures++
@@ -349,7 +350,7 @@ func (s *CollectorService) UpdateWikiRateLimit(ctx context.Context, wikiID uuid.
 		return
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	wiki.CollectionStatus = models.CollectionStatusRateLimited
 	wiki.LastCheckAt = &now
 	wiki.ConsecutiveFailures++

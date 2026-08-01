@@ -77,7 +77,7 @@ type Wiki struct {
 
 // BeforeUpdate hook to set UpdatedAt
 func (w *Wiki) BeforeUpdate(tx *gorm.DB) error {
-	w.UpdatedAt = time.Now()
+	w.UpdatedAt = time.Now().UTC()
 	return nil
 }
 

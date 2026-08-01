@@ -76,7 +76,9 @@ func NewProviderLimiter(db *gorm.DB, cfg *config.Config) *ProviderLimiter {
 	if db != nil {
 		repo = repository.NewProviderRateLimitRepository(db)
 	}
-	return newProviderLimiter(repo, defaultInterval, fandomInterval, time.Now, sleepContext, positiveJitter)
+	return newProviderLimiter(repo, defaultInterval, fandomInterval, func() time.Time {
+		return time.Now().UTC()
+	}, sleepContext, positiveJitter)
 }
 
 func newProviderLimiter(
@@ -175,9 +177,9 @@ func (l *ProviderLimiter) persist(ctx context.Context, provider string, gate *pr
 	}
 	state := &models.ProviderRateLimit{
 		Provider:              provider,
-		RetryAt:               gate.nextAllowed,
+		RetryAt:               gate.nextAllowed.UTC(),
 		ConsecutiveRateLimits: gate.consecutiveRateLimits,
-		UpdatedAt:             l.now(),
+		UpdatedAt:             l.now().UTC(),
 	}
 	if err := l.repo.Upsert(ctx, state); err != nil {
 		providerLimiterLog.Error("failed to persist provider cooldown", "provider", provider, "error", err)

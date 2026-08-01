@@ -164,12 +164,12 @@ func funcMap() template.FuncMap {
 func formatDate(v any) string {
 	switch val := v.(type) {
 	case time.Time:
-		return val.Format("2006-01-02 15:04")
+		return val.UTC().Format("2006-01-02 15:04 UTC")
 	case *time.Time:
 		if val == nil {
 			return ""
 		}
-		return val.Format("2006-01-02 15:04")
+		return val.UTC().Format("2006-01-02 15:04 UTC")
 	case string:
 		return val
 	default:
@@ -296,7 +296,9 @@ func toa(v any) string {
 		if val == nil {
 			return ""
 		}
-		return val.Format(time.RFC3339)
+		return val.UTC().Format(time.RFC3339)
+	case time.Time:
+		return val.UTC().Format(time.RFC3339)
 	case *string:
 		if val == nil {
 			return ""

@@ -23,6 +23,8 @@ import (
 )
 
 func main() {
+	time.Local = time.UTC
+
 	// Load configuration
 	cfg := config.Load()
 

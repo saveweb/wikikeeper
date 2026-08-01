@@ -15,6 +15,8 @@ import (
 )
 
 func main() {
+	time.Local = time.UTC
+
 	batchSize := flag.Int("batch-size", 1000, "snapshots migrated per transaction")
 	pause := flag.Duration("pause", 0, "pause between batches")
 	finalize := flag.Bool("finalize", false, "rebuild statistics and truncate legacy items after backfill")

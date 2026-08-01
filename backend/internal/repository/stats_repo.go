@@ -52,7 +52,7 @@ func (r *StatsRepository) GetByWikiID(ctx context.Context, wikiID uuid.UUID, day
 	query := r.db.WithContext(ctx).Where("wiki_id = ?", wikiID)
 
 	if days > 0 {
-		since := time.Now().AddDate(0, 0, -days)
+		since := time.Now().UTC().AddDate(0, 0, -days)
 		query = query.Where("time >= ?", since)
 	}
 
@@ -107,7 +107,7 @@ func (r *StatsRepository) DeleteOlderThan(ctx context.Context, days int) error {
 		return nil
 	}
 
-	cutoff := time.Now().AddDate(0, 0, -days)
+	cutoff := time.Now().UTC().AddDate(0, 0, -days)
 	return r.db.WithContext(ctx).
 		Where("time < ?", cutoff).
 		Delete(&models.WikiStats{}).Error

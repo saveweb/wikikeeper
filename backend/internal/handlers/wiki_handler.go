@@ -248,7 +248,7 @@ func (h *WikiHandler) TriggerCheck(c echo.Context) error {
 				return c.JSON(http.StatusTooManyRequests, map[string]string{
 					"detail":        "Rate limit exceeded. Only 1 check per hour per wiki for anonymous users.",
 					"retry_after":   fmt.Sprintf("%.0f", remainingTime.Seconds()),
-					"last_check_at": wiki.LastCheckAt.Format(time.RFC3339),
+					"last_check_at": wiki.LastCheckAt.UTC().Format(time.RFC3339),
 				})
 			}
 		}
@@ -385,7 +385,7 @@ func (h *WikiHandler) CheckArchive(c echo.Context) error {
 				return c.JSON(http.StatusTooManyRequests, map[string]string{
 					"detail":                "Rate limit exceeded. Only 1 archive check per hour per wiki for anonymous users.",
 					"retry_after":           fmt.Sprintf("%.0f", remainingTime.Seconds()),
-					"archive_last_check_at": wiki.ArchiveLastCheckAt.Format(time.RFC3339),
+					"archive_last_check_at": wiki.ArchiveLastCheckAt.UTC().Format(time.RFC3339),
 				})
 			}
 		}

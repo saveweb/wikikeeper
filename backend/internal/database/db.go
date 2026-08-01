@@ -7,13 +7,13 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	applogger "wikikeeper-backend/internal/logger"
 	"wikikeeper-backend/internal/config"
+	applogger "wikikeeper-backend/internal/logger"
 )
 
 // buildDSN constructs PostgreSQL DSN from config
 func buildDSN(cfg *config.Config) string {
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable TimeZone=UTC",
 		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
 }
 

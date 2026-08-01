@@ -89,7 +89,7 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 	wikis, err := wikiRepo.GetDueForArchiveCheck(
 		ctx,
 		s.config.ArchiveCheckBatchSize,
-		time.Now().Add(-archiveCheckInterval),
+		time.Now().UTC().Add(-archiveCheckInterval),
 	)
 	if err != nil {
 		archiveSchedulerLog.Error("failed to get wikis", "error", err)
@@ -167,7 +167,7 @@ func (s *ArchiveScheduler) periodicRun(ctx context.Context) {
 			wikis, err := wikiRepo.GetDueForArchiveCheck(
 				ctx,
 				1,
-				time.Now().Add(-archiveCheckInterval),
+				time.Now().UTC().Add(-archiveCheckInterval),
 			)
 			if err != nil {
 				archiveSchedulerLog.Error("failed to list wikis", "error", err, "sleep", archiveIdlePollInterval)

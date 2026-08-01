@@ -128,4 +128,66 @@ func TestCollectionStateMigrationPostgres(t *testing.T) {
 	var cursor int64
 	require.NoError(t, db.Raw(`SELECT backfill_cursor FROM extension_storage_state WHERE singleton`).Scan(&cursor).Error)
 	require.Zero(t, cursor)
+
+	require.NoError(t, db.Exec(`SET TIME ZONE 'Europe/Paris'`).Error)
+	require.NoError(t, db.Exec(`
+		CREATE TABLE schema_migrations (
+			version INT PRIMARY KEY,
+			name VARCHAR(255) NOT NULL,
+			applied_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error)
+	require.NoError(t, db.Exec(`
+		INSERT INTO schema_migrations (version, name, applied_at)
+		VALUES (1, 'fixture', TIMESTAMPTZ '2026-01-02 03:04:05+00')
+	`).Error)
+	require.NoError(t, db.Exec(
+		`UPDATE wikis SET created_at = TIMESTAMP '2026-01-02 03:04:05' WHERE id = ?`,
+		verifiedID,
+	).Error)
+	up, err = readMigrationFile(12, "up")
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(up).Error)
+
+	var createdAt time.Time
+	require.NoError(t, db.Raw(`SELECT created_at FROM wikis WHERE id = ?`, verifiedID).Scan(&createdAt).Error)
+	require.Equal(t, time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC), createdAt.UTC())
+	var appliedAt time.Time
+	require.NoError(t, db.Raw(`SELECT applied_at FROM schema_migrations WHERE version = 1`).Scan(&appliedAt).Error)
+	require.Equal(t, time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC), appliedAt.UTC())
+
+	var nonUTCColumns int64
+	require.NoError(t, db.Raw(`
+		SELECT COUNT(*)
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+		  AND data_type = 'timestamp without time zone'
+	`).Scan(&nonUTCColumns).Error)
+	require.Zero(t, nonUTCColumns)
+
+	down, err := readMigrationFile(12, "down")
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`UPDATE extension_storage_state SET legacy_writes = FALSE`).Error)
+	require.NoError(t, db.Exec(down).Error)
+	require.NoError(t, db.Exec(up).Error)
+
+	var viewDefinition string
+	require.NoError(t, db.Raw(`SELECT pg_get_viewdef('mv_extension_stats'::regclass, true)`).Scan(&viewDefinition).Error)
+	require.Contains(t, viewDefinition, "wiki_extension_set_items")
+	require.NotContains(t, viewDefinition, "wiki_extension_items wei")
+	require.NoError(t, db.Raw(`SELECT applied_at FROM schema_migrations WHERE version = 1`).Scan(&appliedAt).Error)
+	require.Equal(t, time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC), appliedAt.UTC())
+
+	require.NoError(t, db.Exec(`DROP SCHEMA public CASCADE; CREATE SCHEMA public`).Error)
+	require.NoError(t, RunMigrations(db))
+	var appliedCount int64
+	require.NoError(t, db.Table("schema_migrations").Count(&appliedCount).Error)
+	require.EqualValues(t, len(migrations), appliedCount)
+	require.NoError(t, db.Raw(`
+		SELECT COUNT(*)
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+		  AND data_type = 'timestamp without time zone'
+	`).Scan(&nonUTCColumns).Error)
+	require.Zero(t, nonUTCColumns)
 }

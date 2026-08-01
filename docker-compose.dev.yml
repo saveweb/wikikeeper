@@ -6,10 +6,12 @@ services:
     image: postgres:16-alpine
     container_name: wikikeeper-postgres-dev
     environment:
+      TZ: UTC
       POSTGRES_DB: wikikeeper
       POSTGRES_USER: wikikeeper
       POSTGRES_PASSWORD: wikikeeper123
       POSTGRES_INITDB_ARGS: "-E UTF8"
+    command: ["postgres", "-c", "timezone=UTC"]
     ports:
       - "5432:5432"
     volumes:
@@ -27,6 +29,7 @@ services:
       dockerfile: Dockerfile.dev
     container_name: wikikeeper-backend-dev
     environment:
+      TZ: UTC
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: wikikeeper

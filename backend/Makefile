@@ -170,7 +170,7 @@ db-migrate: ## Run database migrations
 
 db-migrate-create: ## Create a new migration (use NAME=migration_name)
 	@if [ -z "$(NAME)" ]; then echo "❌ Usage: make db-migrate-create NAME=migration_name"; exit 1; fi
-	@TIMESTAMP=$$(date +%Y%m%d%H%M%S); \
+	@TIMESTAMP=$$(date -u +%Y%m%d%H%M%S); \
 	echo "📝 Creating migration: $$TIMESTAMP_$(NAME)"; \
 	touch migrations/$$TIMESTAMP_$(NAME).up.sql; \
 	touch migrations/$$TIMESTAMP_$(NAME).down.sql; \

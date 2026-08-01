@@ -71,3 +71,17 @@ func TestExtensionBackfillCursorMigrationIsRegistered(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, up, "backfill_cursor BIGINT NOT NULL DEFAULT 0")
 }
+
+func TestNormalizeTimestampsToUTCMigrationIsRegistered(t *testing.T) {
+	require.Equal(t, "normalize_timestamps_to_utc", getMigrationName(12))
+	up, err := readMigrationFile(12, "up")
+	require.NoError(t, err)
+	for _, fragment := range []string{
+		"AT TIME ZONE 'UTC'",
+		"TYPE TIMESTAMPTZ",
+		"DROP MATERIALIZED VIEW IF EXISTS mv_extension_stats",
+		"CREATE MATERIALIZED VIEW mv_extension_stats",
+	} {
+		require.Contains(t, up, fragment)
+	}
+}

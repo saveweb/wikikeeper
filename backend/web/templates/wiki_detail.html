@@ -42,7 +42,7 @@
         <div class="flex flex-wrap items-baseline justify-between gap-2 mb-2">
             <h2 class="text-sm font-semibold text-red-700">Last Stats Error</h2>
             {{with $.Wiki.LastErrorAt}}
-            <time class="text-xs text-gray-500">{{formatDate .}}</time>
+            <time datetime="{{toa .}}" class="text-xs text-gray-500">{{formatDate .}}</time>
             {{end}}
         </div>
         <pre class="whitespace-pre-wrap break-words text-xs leading-5 text-gray-700 font-mono">{{toa .}}</pre>
@@ -54,7 +54,7 @@
         <div class="flex flex-wrap items-baseline justify-between gap-2 mb-2">
             <h2 class="text-sm font-semibold text-amber-700">Last Archive Error</h2>
             {{with $.Wiki.ArchiveLastErrorAt}}
-            <time class="text-xs text-gray-500">{{formatDate .}}</time>
+            <time datetime="{{toa .}}" class="text-xs text-gray-500">{{formatDate .}}</time>
             {{end}}
         </div>
         <pre class="whitespace-pre-wrap break-words text-xs leading-5 text-gray-700 font-mono">{{toa .}}</pre>
@@ -332,11 +332,13 @@
         const formatDate = (value) => new Intl.DateTimeFormat(undefined, {
             year: 'numeric',
             month: 'short',
-            day: 'numeric'
+            day: 'numeric',
+            timeZone: 'UTC'
         }).format(new Date(Number(value)));
         const formatDateTime = (value) => new Intl.DateTimeFormat(undefined, {
             dateStyle: 'medium',
-            timeStyle: 'short'
+            timeStyle: 'short',
+            timeZone: 'UTC'
         }).format(new Date(Number(value)));
 
         new Chart(document.getElementById('stats-chart'), {
@@ -357,7 +359,7 @@
                     x: {
                         type: 'linear',
                         bounds: 'data',
-                        title: { display: true, text: 'Date' },
+                        title: { display: true, text: 'Date (UTC)' },
                         ticks: {
                             autoSkip: true,
                             maxTicksLimit: 8,
@@ -371,7 +373,7 @@
                     legend: { position: 'top' },
                     tooltip: {
                         callbacks: {
-                            title: (items) => items.length ? formatDateTime(items[0].parsed.x) : ''
+                            title: (items) => items.length ? `${formatDateTime(items[0].parsed.x)} UTC` : ''
                         }
                     }
                 }

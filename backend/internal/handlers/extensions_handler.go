@@ -81,6 +81,7 @@ func (h *ExtensionsHandler) GetExtensionsHistory(c echo.Context) error {
 		if err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"detail": "Invalid from time format"})
 		}
+		from = from.UTC()
 		fromSet = true
 	}
 
@@ -89,15 +90,16 @@ func (h *ExtensionsHandler) GetExtensionsHistory(c echo.Context) error {
 		if err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"detail": "Invalid to time format"})
 		}
+		to = to.UTC()
 		toSet = true
 	}
 
 	// Default time range: last 30 days
 	if !fromSet {
-		from = time.Now().AddDate(0, 0, -30)
+		from = time.Now().UTC().AddDate(0, 0, -30)
 	}
 	if !toSet {
-		to = time.Now()
+		to = time.Now().UTC()
 	}
 	if from.After(to) {
 		return c.JSON(http.StatusBadRequest, map[string]string{"detail": "from time must not be after to time"})
@@ -125,8 +127,8 @@ func (h *ExtensionsHandler) GetExtensionsHistory(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"wiki_id":   idStr,
-		"from":      from.Format(time.RFC3339),
-		"to":        to.Format(time.RFC3339),
+		"from":      from.UTC().Format(time.RFC3339),
+		"to":        to.UTC().Format(time.RFC3339),
 		"snapshots": snapshots,
 	})
 }
