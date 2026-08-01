@@ -116,6 +116,14 @@ func TestExtensionSetMigrationPostgres(t *testing.T) {
 	require.Zero(t, remaining)
 
 	require.NoError(t, repo.FinalizeExtensionSetMigration(ctx))
+	var stagedViews int64
+	require.NoError(t, db.Raw(`
+		SELECT COUNT(*)
+		FROM pg_matviews
+		WHERE schemaname = current_schema()
+		  AND matviewname = 'mv_extension_stats_next'
+	`).Scan(&stagedViews).Error)
+	require.Zero(t, stagedViews)
 	var legacyItems int64
 	require.NoError(t, db.Table("wiki_extension_items").Count(&legacyItems).Error)
 	require.Zero(t, legacyItems)

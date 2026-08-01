@@ -272,8 +272,8 @@ func (r *ExtensionsRepository) LegacyExtensionWritesEnabled(ctx context.Context)
 	return extensionLegacyWrites(r.db.WithContext(ctx))
 }
 
-// FinalizeExtensionSetMigration prevents further legacy writes, rebuilds the
-// statistics view from extension sets, and releases the legacy table storage.
+// FinalizeExtensionSetMigration prevents further legacy writes, swaps in
+// statistics built from extension sets, and releases the legacy table storage.
 func (r *ExtensionsRepository) FinalizeExtensionSetMigration(ctx context.Context) error {
 	remaining, err := r.RemainingLegacyExtensionSnapshots(ctx)
 	if err != nil {
@@ -286,28 +286,47 @@ func (r *ExtensionsRepository) FinalizeExtensionSetMigration(ctx context.Context
 		return fmt.Errorf("extension set finalization requires PostgreSQL")
 	}
 
+	// Building the view can take minutes in production. Do it without holding
+	// the legacy_writes row lock so live collectors can continue dual-writing.
+	if err := r.db.WithContext(ctx).Exec(`
+		DROP MATERIALIZED VIEW IF EXISTS mv_extension_stats_next;
+		CREATE MATERIALIZED VIEW mv_extension_stats_next AS
+		SELECT item.name, COUNT(*) AS count
+		FROM wiki_extension_set_items item
+		JOIN wiki_extensions_snapshots snapshot
+		  ON snapshot.extension_set_id = item.set_id
+		WHERE snapshot.valid_until IS NULL
+		GROUP BY item.name
+		WITH DATA;
+		CREATE UNIQUE INDEX idx_mv_extension_stats_next_name
+		ON mv_extension_stats_next(name);
+		CREATE INDEX idx_mv_extension_stats_next_count
+		ON mv_extension_stats_next(count DESC, name);
+	`).Error; err != nil {
+		return err
+	}
+
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`SELECT pg_advisory_xact_lock(77110301)`).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec(`
+			DROP MATERIALIZED VIEW mv_extension_stats;
+			ALTER MATERIALIZED VIEW mv_extension_stats_next
+			RENAME TO mv_extension_stats;
+			ALTER INDEX idx_mv_extension_stats_next_name
+			RENAME TO idx_mv_extension_stats_name;
+			ALTER INDEX idx_mv_extension_stats_next_count
+			RENAME TO idx_mv_extension_stats_count;
+		`).Error; err != nil {
+			return err
+		}
+		// Existing collectors holding FOR SHARE finish first; new collectors
+		// wait here and observe legacy_writes=false after commit.
 		if err := tx.Exec(`
 			UPDATE extension_storage_state
 			SET legacy_writes = FALSE, updated_at = NOW()
 			WHERE singleton = TRUE
-		`).Error; err != nil {
-			return err
-		}
-		if err := tx.Exec(`
-			DROP MATERIALIZED VIEW IF EXISTS mv_extension_stats;
-			CREATE MATERIALIZED VIEW mv_extension_stats AS
-			SELECT item.name, COUNT(*) AS count
-			FROM wiki_extension_set_items item
-			JOIN wiki_extensions_snapshots snapshot
-			  ON snapshot.extension_set_id = item.set_id
-			WHERE snapshot.valid_until IS NULL
-			GROUP BY item.name
-			WITH DATA;
-			CREATE UNIQUE INDEX idx_mv_extension_stats_name
-			ON mv_extension_stats(name);
-			CREATE INDEX idx_mv_extension_stats_count
-			ON mv_extension_stats(count DESC, name);
 		`).Error; err != nil {
 			return err
 		}
