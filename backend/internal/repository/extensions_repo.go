@@ -2,6 +2,11 @@ package repository
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,13 +27,27 @@ func NewExtensionsRepository(db *gorm.DB) *ExtensionsRepository {
 // CreateSnapshot creates a new extensions snapshot with its items
 func (r *ExtensionsRepository) CreateSnapshot(ctx context.Context, snapshot *models.WikiExtensionsSnapshot) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// GORM will automatically create the associated items due to the relationship defined in the model
-		// We just need to create the snapshot and GORM handles the rest
-		if err := tx.Create(snapshot).Error; err != nil {
+		setID, err := ensureExtensionSet(tx, snapshot.Items)
+		if err != nil {
+			return err
+		}
+		snapshot.ExtensionSetID = &setID
+
+		if err := tx.Omit("Items").Create(snapshot).Error; err != nil {
 			return err
 		}
 
-		return nil
+		legacyWrites, err := extensionLegacyWrites(tx)
+		if err != nil || !legacyWrites || len(snapshot.Items) == 0 {
+			return err
+		}
+		items := append([]models.WikiExtensionItem(nil), snapshot.Items...)
+		for i := range items {
+			items[i].ID = 0
+			items[i].SnapshotID = snapshot.ID
+			items[i].CreatedAt = time.Time{}
+		}
+		return tx.CreateInBatches(&items, 500).Error
 	})
 }
 
@@ -36,11 +55,13 @@ func (r *ExtensionsRepository) CreateSnapshot(ctx context.Context, snapshot *mod
 func (r *ExtensionsRepository) GetLatestSnapshot(ctx context.Context, wikiID uuid.UUID) (*models.WikiExtensionsSnapshot, error) {
 	var snapshot models.WikiExtensionsSnapshot
 	err := r.db.WithContext(ctx).
-		Preload("Items").
 		Where("wiki_id = ? AND valid_until IS NULL", wikiID).
 		Order("snapshot_at DESC").
 		First(&snapshot).Error
 	if err != nil {
+		return nil, err
+	}
+	if err := r.loadSnapshotItems(ctx, []*models.WikiExtensionsSnapshot{&snapshot}); err != nil {
 		return nil, err
 	}
 	return &snapshot, nil
@@ -50,7 +71,6 @@ func (r *ExtensionsRepository) GetLatestSnapshot(ctx context.Context, wikiID uui
 func (r *ExtensionsRepository) GetSnapshotsInTimeRange(ctx context.Context, wikiID uuid.UUID, from, to time.Time) ([]*models.WikiExtensionsSnapshot, error) {
 	var snapshots []*models.WikiExtensionsSnapshot
 	err := r.db.WithContext(ctx).
-		Preload("Items").
 		Where(
 			"wiki_id = ? AND snapshot_at <= ? AND (valid_until IS NULL OR valid_until >= ?)",
 			wikiID,
@@ -60,6 +80,9 @@ func (r *ExtensionsRepository) GetSnapshotsInTimeRange(ctx context.Context, wiki
 		Order("snapshot_at DESC").
 		Find(&snapshots).Error
 	if err != nil {
+		return nil, err
+	}
+	if err := r.loadSnapshotItems(ctx, snapshots); err != nil {
 		return nil, err
 	}
 	return snapshots, nil
@@ -87,14 +110,177 @@ func (r *ExtensionsRepository) SnapshotExists(ctx context.Context, wikiID uuid.U
 func (r *ExtensionsRepository) GetAllSnapshots(ctx context.Context, wikiID uuid.UUID) ([]*models.WikiExtensionsSnapshot, error) {
 	var snapshots []*models.WikiExtensionsSnapshot
 	err := r.db.WithContext(ctx).
-		Preload("Items").
 		Where("wiki_id = ?", wikiID).
 		Order("snapshot_at DESC").
 		Find(&snapshots).Error
 	if err != nil {
 		return nil, err
 	}
+	if err := r.loadSnapshotItems(ctx, snapshots); err != nil {
+		return nil, err
+	}
 	return snapshots, nil
+}
+
+type canonicalExtensionItem struct {
+	ExtType     string  `json:"type"`
+	Name        string  `json:"name"`
+	URL         *string `json:"url"`
+	Version     *string `json:"version"`
+	LicenseName *string `json:"license_name"`
+}
+
+type extensionSetHash []byte
+
+func (hash extensionSetHash) Value() (driver.Value, error) {
+	return []byte(hash), nil
+}
+
+func canonicalExtensionSet(items []models.WikiExtensionItem) ([32]byte, []models.WikiExtensionSetItem, error) {
+	canonical := make([]canonicalExtensionItem, 0, len(items))
+	for _, item := range items {
+		canonical = append(canonical, canonicalExtensionItem{
+			ExtType: item.ExtType, Name: item.Name, URL: item.URL,
+			Version: item.Version, LicenseName: item.LicenseName,
+		})
+	}
+	sort.Slice(canonical, func(i, j int) bool {
+		if canonical[i].ExtType != canonical[j].ExtType {
+			return canonical[i].ExtType < canonical[j].ExtType
+		}
+		return canonical[i].Name < canonical[j].Name
+	})
+	payload, err := json.Marshal(canonical)
+	if err != nil {
+		return [32]byte{}, nil, err
+	}
+	hash := sha256.Sum256(payload)
+	setItems := make([]models.WikiExtensionSetItem, 0, len(canonical))
+	for _, item := range canonical {
+		setItems = append(setItems, models.WikiExtensionSetItem{
+			ExtType: item.ExtType, Name: item.Name, URL: item.URL,
+			Version: item.Version, LicenseName: item.LicenseName,
+		})
+	}
+	return hash, setItems, nil
+}
+
+func ensureExtensionSet(tx *gorm.DB, items []models.WikiExtensionItem) (int64, error) {
+	hash, setItems, err := canonicalExtensionSet(items)
+	if err != nil {
+		return 0, err
+	}
+
+	var setID int64
+	inserted := false
+	hashValue := extensionSetHash(hash[:])
+	if tx.Dialector.Name() == "postgres" {
+		rows, err := tx.Raw(`
+			INSERT INTO wiki_extension_sets(content_hash, item_count)
+			VALUES (?, ?)
+			ON CONFLICT (content_hash) DO NOTHING
+			RETURNING id
+		`, hashValue, len(setItems)).Rows()
+		if err != nil {
+			return 0, err
+		}
+		if rows.Next() {
+			inserted = true
+			err = rows.Scan(&setID)
+		}
+		rows.Close()
+		if err != nil {
+			return 0, err
+		}
+	} else {
+		result := tx.Exec(`INSERT OR IGNORE INTO wiki_extension_sets(content_hash, item_count) VALUES (?, ?)`, hashValue, len(setItems))
+		if result.Error != nil {
+			return 0, result.Error
+		}
+		inserted = result.RowsAffected == 1
+		if err := tx.Raw(`SELECT id FROM wiki_extension_sets WHERE content_hash = ?`, hashValue).Scan(&setID).Error; err != nil {
+			return 0, err
+		}
+	}
+
+	if !inserted {
+		var itemCount int
+		if err := tx.Raw(`SELECT id, item_count FROM wiki_extension_sets WHERE content_hash = ?`, hashValue).Row().Scan(&setID, &itemCount); err != nil {
+			return 0, err
+		}
+		if itemCount != len(setItems) {
+			return 0, fmt.Errorf("extension set hash collision: stored %d items, got %d", itemCount, len(setItems))
+		}
+		return setID, nil
+	}
+
+	for i := range setItems {
+		setItems[i].SetID = setID
+	}
+	if len(setItems) > 0 {
+		if err := tx.CreateInBatches(&setItems, 500).Error; err != nil {
+			return 0, err
+		}
+	}
+	return setID, nil
+}
+
+func extensionLegacyWrites(tx *gorm.DB) (bool, error) {
+	var enabled bool
+	query := `SELECT legacy_writes FROM extension_storage_state WHERE singleton = ?`
+	if tx.Dialector.Name() == "postgres" {
+		query += ` FOR SHARE`
+	}
+	err := tx.Raw(query, true).Scan(&enabled).Error
+	return enabled, err
+}
+
+func (r *ExtensionsRepository) loadSnapshotItems(ctx context.Context, snapshots []*models.WikiExtensionsSnapshot) error {
+	setSnapshots := make(map[int64][]*models.WikiExtensionsSnapshot)
+	legacySnapshots := make(map[uuid.UUID]*models.WikiExtensionsSnapshot)
+	setIDs := make([]int64, 0)
+	legacyIDs := make([]uuid.UUID, 0)
+	for _, snapshot := range snapshots {
+		if snapshot.ExtensionSetID != nil {
+			if _, exists := setSnapshots[*snapshot.ExtensionSetID]; !exists {
+				setIDs = append(setIDs, *snapshot.ExtensionSetID)
+			}
+			setSnapshots[*snapshot.ExtensionSetID] = append(setSnapshots[*snapshot.ExtensionSetID], snapshot)
+		} else {
+			legacyIDs = append(legacyIDs, snapshot.ID)
+			legacySnapshots[snapshot.ID] = snapshot
+		}
+	}
+
+	if len(setIDs) > 0 {
+		var items []models.WikiExtensionSetItem
+		if err := r.db.WithContext(ctx).Where("set_id IN ?", setIDs).Order("ext_type, name").Find(&items).Error; err != nil {
+			return err
+		}
+		bySet := make(map[int64][]models.WikiExtensionItem)
+		for _, item := range items {
+			bySet[item.SetID] = append(bySet[item.SetID], models.WikiExtensionItem{
+				ExtType: item.ExtType, Name: item.Name, URL: item.URL,
+				Version: item.Version, LicenseName: item.LicenseName,
+			})
+		}
+		for setID, targets := range setSnapshots {
+			for _, snapshot := range targets {
+				snapshot.Items = append([]models.WikiExtensionItem(nil), bySet[setID]...)
+			}
+		}
+	}
+
+	if len(legacyIDs) > 0 {
+		var items []models.WikiExtensionItem
+		if err := r.db.WithContext(ctx).Where("snapshot_id IN ?", legacyIDs).Order("ext_type, name").Find(&items).Error; err != nil {
+			return err
+		}
+		for _, item := range items {
+			legacySnapshots[item.SnapshotID].Items = append(legacySnapshots[item.SnapshotID].Items, item)
+		}
+	}
+	return nil
 }
 
 // ExtensionWikiInfo contains wiki and extension information
@@ -130,32 +316,36 @@ func (r *ExtensionsRepository) GetWikisUsingExtension(
 		opts.Limit = 20
 	}
 
-	// Count total
-	baseQuery := r.db.WithContext(ctx).
-		Table("wiki_extension_items wei").
-		Joins("JOIN wiki_extensions_snapshots wes ON wei.snapshot_id = wes.id").
-		Joins("JOIN wikis w ON wes.wiki_id = w.id").
-		Where("wei.name = ? AND wes.valid_until IS NULL", extensionName)
+	const usageSQL = `
+		SELECT w.id AS wiki_id, w.wiki_name, w.sitename, w.url,
+		       wes.snapshot_at, item.version AS extension_version
+		FROM wiki_extension_set_items item
+		JOIN wiki_extensions_snapshots wes ON wes.extension_set_id = item.set_id
+		JOIN wikis w ON w.id = wes.wiki_id
+		WHERE item.name = ? AND wes.valid_until IS NULL
+		UNION ALL
+		SELECT w.id AS wiki_id, w.wiki_name, w.sitename, w.url,
+		       wes.snapshot_at, item.version AS extension_version
+		FROM wiki_extension_items item
+		JOIN wiki_extensions_snapshots wes ON wes.id = item.snapshot_id
+		JOIN wikis w ON w.id = wes.wiki_id
+		WHERE wes.extension_set_id IS NULL
+		  AND item.name = ? AND wes.valid_until IS NULL
+	`
 
-	if err := baseQuery.Count(&total).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(
+		"SELECT COUNT(*) FROM ("+usageSQL+") AS usage",
+		extensionName, extensionName,
+	).Scan(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	// Get paginated data
 	offset := (opts.Page - 1) * opts.Limit
-	err := baseQuery.
-		Select(`
-			w.id as wiki_id,
-			w.wiki_name,
-			w.sitename,
-			w.url,
-			wes.snapshot_at,
-			wei.version as extension_version
-		`).
-		Offset(offset).
-		Limit(opts.Limit).
-		Order("w.sitename ASC NULLS LAST, w.url ASC").
-		Scan(&result).Error
+	err := r.db.WithContext(ctx).Raw(
+		"SELECT * FROM ("+usageSQL+") AS usage "+
+			"ORDER BY sitename ASC NULLS LAST, url ASC LIMIT ? OFFSET ?",
+		extensionName, extensionName, opts.Limit, offset,
+	).Scan(&result).Error
 
 	if err != nil {
 		return nil, 0, err
@@ -179,17 +369,27 @@ func (r *ExtensionsRepository) GetExtensionVersionDistribution(
 
 	// Use COALESCE to convert NULL to empty string
 	query := `
+		WITH usage AS (
+			SELECT item.version
+			FROM wiki_extension_set_items item
+			JOIN wiki_extensions_snapshots wes ON wes.extension_set_id = item.set_id
+			WHERE item.name = ? AND wes.valid_until IS NULL
+			UNION ALL
+			SELECT item.version
+			FROM wiki_extension_items item
+			JOIN wiki_extensions_snapshots wes ON wes.id = item.snapshot_id
+			WHERE wes.extension_set_id IS NULL
+			  AND item.name = ? AND wes.valid_until IS NULL
+		)
 		SELECT
-			COALESCE(wei.version, '') as version,
+			COALESCE(version, '') as version,
 			COUNT(*) as count
-		FROM wiki_extension_items wei
-		JOIN wiki_extensions_snapshots wes ON wei.snapshot_id = wes.id
-		WHERE wei.name = ? AND wes.valid_until IS NULL
-		GROUP BY COALESCE(wei.version, '')
+		FROM usage
+		GROUP BY COALESCE(version, '')
 		ORDER BY count DESC
 	`
 
-	err := r.db.WithContext(ctx).Raw(query, extensionName).Scan(&stats).Error
+	err := r.db.WithContext(ctx).Raw(query, extensionName, extensionName).Scan(&stats).Error
 	if err != nil {
 		return nil, 0, err
 	}

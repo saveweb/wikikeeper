@@ -110,4 +110,16 @@ func TestCollectionStateMigrationPostgres(t *testing.T) {
 	require.Equal(t, 1, unverified.ConsecutiveFailures)
 	require.NotNil(t, unverified.NextCheckAt)
 	require.True(t, unverified.NextCheckAt.After(migrationStart))
+
+	up, err = readMigrationFile(10, "up")
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(up).Error)
+	for _, table := range []string{"wiki_extension_sets", "wiki_extension_set_items", "extension_storage_state"} {
+		var exists bool
+		require.NoError(t, db.Raw(`SELECT to_regclass(?) IS NOT NULL`, table).Scan(&exists).Error)
+		require.True(t, exists, table)
+	}
+	var legacyWrites bool
+	require.NoError(t, db.Raw(`SELECT legacy_writes FROM extension_storage_state WHERE singleton`).Scan(&legacyWrites).Error)
+	require.True(t, legacyWrites)
 }

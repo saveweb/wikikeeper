@@ -58,6 +58,10 @@ var migrations = []Migration{
 		Version: 9,
 		Name:    "reset_stale_rate_limits",
 	},
+	{
+		Version: 10,
+		Name:    "content_address_extension_sets",
+	},
 }
 
 // RunMigrations executes all pending migrations
