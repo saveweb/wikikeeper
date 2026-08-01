@@ -132,7 +132,7 @@ func (r *ExtensionsRepository) backfillExtensionSetsSequential(ctx context.Conte
 		}
 
 		var window []models.WikiExtensionItem
-		if err := tx.Select("id", "snapshot_id").Where("id > ?", cursor).
+		if err := tx.Where("id > ?", cursor).
 			Order("id").Limit(itemLimit).Find(&window).Error; err != nil {
 			return err
 		}
@@ -149,16 +149,43 @@ func (r *ExtensionsRepository) backfillExtensionSetsSequential(ctx context.Conte
 			}
 		}
 
-		// Snapshots can interleave when collectors insert concurrently. Fetch
-		// complete snapshots after discovering them from the sequential window.
-		var processItems []models.WikiExtensionItem
-		if err := tx.Where("snapshot_id IN ?", order).
-			Order("snapshot_id, ext_type, name").Find(&processItems).Error; err != nil {
+		itemsBySnapshot := make(map[uuid.UUID][]models.WikiExtensionItem, len(order))
+		for _, item := range window {
+			itemsBySnapshot[item.SnapshotID] = append(itemsBySnapshot[item.SnapshotID], item)
+		}
+
+		// Snapshot inserts can interleave. The snapshot_id index can count each
+		// complete set without reading the large heap; only sets crossing this
+		// window need a random heap lookup.
+		type snapshotItemCount struct {
+			SnapshotID uuid.UUID
+			Count      int
+		}
+		var counts []snapshotItemCount
+		if err := tx.Model(&models.WikiExtensionItem{}).
+			Select("snapshot_id", "COUNT(*) AS count").
+			Where("snapshot_id IN ?", order).
+			Group("snapshot_id").Scan(&counts).Error; err != nil {
 			return err
 		}
-		itemsBySnapshot := make(map[uuid.UUID][]models.WikiExtensionItem, len(order))
-		for _, item := range processItems {
-			itemsBySnapshot[item.SnapshotID] = append(itemsBySnapshot[item.SnapshotID], item)
+		var incomplete []uuid.UUID
+		for _, count := range counts {
+			if len(itemsBySnapshot[count.SnapshotID]) != count.Count {
+				incomplete = append(incomplete, count.SnapshotID)
+			}
+		}
+		var boundaryItems []models.WikiExtensionItem
+		if len(incomplete) > 0 {
+			if err := tx.Where("snapshot_id IN ?", incomplete).
+				Order("snapshot_id, ext_type, name").Find(&boundaryItems).Error; err != nil {
+				return err
+			}
+			for _, snapshotID := range incomplete {
+				itemsBySnapshot[snapshotID] = nil
+			}
+			for _, item := range boundaryItems {
+				itemsBySnapshot[item.SnapshotID] = append(itemsBySnapshot[item.SnapshotID], item)
+			}
 		}
 
 		type snapshotState struct {
@@ -198,7 +225,7 @@ func (r *ExtensionsRepository) backfillExtensionSetsSequential(ctx context.Conte
 			}
 		}
 
-		result.Items = len(processItems)
+		result.Items = len(window) + len(boundaryItems)
 		cursor = window[len(window)-1].ID
 		return tx.Exec(`
 			UPDATE extension_storage_state
