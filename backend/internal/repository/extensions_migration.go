@@ -15,6 +15,32 @@ type ExtensionSetBackfillResult struct {
 	Items     int
 }
 
+type extensionSetBackfillGroup struct {
+	items       []models.WikiExtensionItem
+	snapshotIDs []uuid.UUID
+}
+
+func groupExtensionSnapshots(order []uuid.UUID, itemsBySnapshot map[uuid.UUID][]models.WikiExtensionItem, include func(uuid.UUID) bool) (map[[32]byte]*extensionSetBackfillGroup, error) {
+	groups := make(map[[32]byte]*extensionSetBackfillGroup)
+	for _, snapshotID := range order {
+		if !include(snapshotID) {
+			continue
+		}
+		items := itemsBySnapshot[snapshotID]
+		hash, _, err := canonicalExtensionSet(items)
+		if err != nil {
+			return nil, err
+		}
+		group := groups[hash]
+		if group == nil {
+			group = &extensionSetBackfillGroup{items: items}
+			groups[hash] = group
+		}
+		group.snapshotIDs = append(group.snapshotIDs, snapshotID)
+	}
+	return groups, nil
+}
+
 // BackfillExtensionSets migrates one resumable batch of legacy snapshots.
 func (r *ExtensionsRepository) BackfillExtensionSets(ctx context.Context, batchSize int) (ExtensionSetBackfillResult, error) {
 	if batchSize < 1 {
@@ -60,13 +86,17 @@ func (r *ExtensionsRepository) backfillExtensionSetsBySnapshot(ctx context.Conte
 			itemsBySnapshot[item.SnapshotID] = append(itemsBySnapshot[item.SnapshotID], item)
 		}
 
+		groups, err := groupExtensionSnapshots(ids, itemsBySnapshot, func(uuid.UUID) bool { return true })
+		if err != nil {
+			return err
+		}
 		updates := make(map[int64][]uuid.UUID)
-		for _, snapshot := range snapshots {
-			setID, err := ensureExtensionSet(tx, itemsBySnapshot[snapshot.ID])
+		for _, group := range groups {
+			setID, err := r.ensureExtensionSet(tx, group.items)
 			if err != nil {
-				return fmt.Errorf("snapshot %s: %w", snapshot.ID, err)
+				return err
 			}
-			updates[setID] = append(updates[setID], snapshot.ID)
+			updates[setID] = append(updates[setID], group.snapshotIDs...)
 		}
 		for setID, snapshotIDs := range updates {
 			if err := tx.Model(&models.WikiExtensionsSnapshot{}).
@@ -87,12 +117,16 @@ func (r *ExtensionsRepository) backfillExtensionSetsSequential(ctx context.Conte
 	result := ExtensionSetBackfillResult{}
 	itemLimit := batchSize * 256
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Serialize migrators without locking extension_storage_state, whose
+		// legacy_writes flag is read by the live collector.
+		if err := tx.Exec(`SELECT pg_advisory_xact_lock(77110301)`).Error; err != nil {
+			return err
+		}
 		var cursor int64
 		if err := tx.Raw(`
 			SELECT backfill_cursor
 			FROM extension_storage_state
 			WHERE singleton = TRUE
-			FOR UPDATE
 		`).Scan(&cursor).Error; err != nil {
 			return err
 		}
@@ -141,17 +175,20 @@ func (r *ExtensionsRepository) backfillExtensionSetsSequential(ctx context.Conte
 			needsBackfill[state.ID] = state.ExtensionSetID == nil
 		}
 
+		groups, err := groupExtensionSnapshots(order, itemsBySnapshot, func(snapshotID uuid.UUID) bool {
+			return needsBackfill[snapshotID]
+		})
+		if err != nil {
+			return err
+		}
 		updates := make(map[int64][]uuid.UUID)
-		for _, snapshotID := range order {
-			if !needsBackfill[snapshotID] {
-				continue
-			}
-			setID, err := ensureExtensionSet(tx, itemsBySnapshot[snapshotID])
+		for _, group := range groups {
+			setID, err := r.ensureExtensionSet(tx, group.items)
 			if err != nil {
-				return fmt.Errorf("snapshot %s: %w", snapshotID, err)
+				return err
 			}
-			updates[setID] = append(updates[setID], snapshotID)
-			result.Snapshots++
+			updates[setID] = append(updates[setID], group.snapshotIDs...)
+			result.Snapshots += len(group.snapshotIDs)
 		}
 		for setID, snapshotIDs := range updates {
 			if err := tx.Model(&models.WikiExtensionsSnapshot{}).
@@ -180,7 +217,7 @@ func (r *ExtensionsRepository) backfillEmptyExtensionSets(tx *gorm.DB, batchSize
 	if len(snapshots) == 0 {
 		return nil
 	}
-	setID, err := ensureExtensionSet(tx, nil)
+	setID, err := r.ensureExtensionSet(tx, nil)
 	if err != nil {
 		return err
 	}

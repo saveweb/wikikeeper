@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,18 +17,20 @@ import (
 
 // ExtensionsRepository handles extensions snapshots data access
 type ExtensionsRepository struct {
-	db *gorm.DB
+	db       *gorm.DB
+	setMu    sync.RWMutex
+	setCache map[[32]byte]int64
 }
 
 // NewExtensionsRepository creates a new ExtensionsRepository
 func NewExtensionsRepository(db *gorm.DB) *ExtensionsRepository {
-	return &ExtensionsRepository{db: db}
+	return &ExtensionsRepository{db: db, setCache: make(map[[32]byte]int64)}
 }
 
 // CreateSnapshot creates a new extensions snapshot with its items
 func (r *ExtensionsRepository) CreateSnapshot(ctx context.Context, snapshot *models.WikiExtensionsSnapshot) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		setID, err := ensureExtensionSet(tx, snapshot.Items)
+		setID, err := r.ensureExtensionSet(tx, snapshot.Items)
 		if err != nil {
 			return err
 		}
@@ -165,10 +168,16 @@ func canonicalExtensionSet(items []models.WikiExtensionItem) ([32]byte, []models
 	return hash, setItems, nil
 }
 
-func ensureExtensionSet(tx *gorm.DB, items []models.WikiExtensionItem) (int64, error) {
+func (r *ExtensionsRepository) ensureExtensionSet(tx *gorm.DB, items []models.WikiExtensionItem) (int64, error) {
 	hash, setItems, err := canonicalExtensionSet(items)
 	if err != nil {
 		return 0, err
+	}
+	r.setMu.RLock()
+	cachedID, cached := r.setCache[hash]
+	r.setMu.RUnlock()
+	if cached {
+		return cachedID, nil
 	}
 
 	var setID int64
@@ -211,6 +220,9 @@ func ensureExtensionSet(tx *gorm.DB, items []models.WikiExtensionItem) (int64, e
 		if itemCount != len(setItems) {
 			return 0, fmt.Errorf("extension set hash collision: stored %d items, got %d", itemCount, len(setItems))
 		}
+		r.setMu.Lock()
+		r.setCache[hash] = setID
+		r.setMu.Unlock()
 		return setID, nil
 	}
 
