@@ -167,7 +167,8 @@ func (p *Pages) WikiDetail(c echo.Context) error {
 		data["LatestStats"] = latestStats
 	}
 
-	statsHistory, err := statsRepo.GetByWikiID(ctx, id, 365)
+	// A zero-day window returns every stored sample for the detail chart.
+	statsHistory, err := statsRepo.GetByWikiID(ctx, id, 0)
 	if err == nil && len(statsHistory) > 1 {
 		data["StatsJSON"] = toJS(statsChartPoints(statsHistory))
 	}
@@ -177,8 +178,7 @@ func (p *Pages) WikiDetail(c echo.Context) error {
 	if err == nil && extSnapshot != nil {
 		data["Extensions"] = extSnapshot
 	}
-	now := time.Now().UTC()
-	extensionHistory, err := extRepo.GetSnapshotsInTimeRange(ctx, id, now.AddDate(-1, 0, 0), now)
+	extensionHistory, err := extRepo.GetAllSnapshots(ctx, id)
 	if err == nil && len(extensionHistory) > 1 {
 		data["ExtensionHistory"] = extensionHistory
 	}
