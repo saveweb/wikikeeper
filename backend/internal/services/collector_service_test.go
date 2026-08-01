@@ -276,16 +276,16 @@ func TestCollectionSuccessClearsBackoffState(t *testing.T) {
 	require.Nil(t, wiki.LastError)
 	require.Nil(t, wiki.LastErrorAt)
 	require.Equal(t, now, *wiki.LastSuccessAt)
-	require.Equal(t, now.Add(defaultCollectionInterval), *wiki.NextCheckAt)
+	require.Equal(t, now.Add(collectionInterval), *wiki.NextCheckAt)
 }
 
-func TestFandomCollectionSuccessUsesReducedCadence(t *testing.T) {
+func TestFandomCollectionSuccessUsesStandardCadence(t *testing.T) {
 	now := time.Date(2026, time.August, 1, 12, 0, 0, 0, time.UTC)
 	wiki := &models.Wiki{URL: "https://example.fandom.com"}
 
 	markWikiCollectionSuccess(wiki, now)
 
-	require.Equal(t, now.Add(fandomCollectionInterval), *wiki.NextCheckAt)
+	require.Equal(t, now.Add(collectionInterval), *wiki.NextCheckAt)
 }
 
 func TestCollectionFailureBackoffIsCapped(t *testing.T) {

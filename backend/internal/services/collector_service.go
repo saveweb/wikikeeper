@@ -19,12 +19,11 @@ import (
 var collectorLog = applogger.With("component", "collector")
 
 const (
-	defaultCollectionInterval = 30 * 24 * time.Hour
-	fandomCollectionInterval  = 21 * 24 * time.Hour
-	terminalFailureInterval   = 90 * 24 * time.Hour
-	baseFailureBackoff        = 3 * 24 * time.Hour
-	maxFailureBackoff         = 30 * 24 * time.Hour
-	siteFailureThreshold      = 3
+	collectionInterval      = 30 * 24 * time.Hour
+	terminalFailureInterval = 90 * 24 * time.Hour
+	baseFailureBackoff      = 3 * 24 * time.Hour
+	maxFailureBackoff       = 30 * 24 * time.Hour
+	siteFailureThreshold    = 3
 )
 
 func markWikiCollectionSuccess(wiki *models.Wiki, now time.Time) {
@@ -32,11 +31,7 @@ func markWikiCollectionSuccess(wiki *models.Wiki, now time.Time) {
 	wiki.APIAvailable = true
 	wiki.LastCheckAt = &now
 	wiki.LastSuccessAt = &now
-	interval := defaultCollectionInterval
-	if requestGroup(wiki.URL) == "fandom.com" {
-		interval = fandomCollectionInterval
-	}
-	nextCheckAt := now.Add(interval)
+	nextCheckAt := now.Add(collectionInterval)
 	wiki.NextCheckAt = &nextCheckAt
 	wiki.Status = models.WikiStatusOK
 	wiki.CollectionStatus = models.CollectionStatusOK
