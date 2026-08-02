@@ -59,7 +59,7 @@
     <tbody class="divide-y divide-gray-200">
     {{range .Wikis}}
         <tr class="hover:bg-gray-50">
-            <td class="px-4 py-3"><a href="/wikis/{{.WikiID}}" class="text-primary-600 hover:underline font-medium text-sm">{{toa .WikiName}}</a></td>
+            <td class="px-4 py-3"><a href="/wikis/{{.WikiID}}" class="text-primary-600 hover:underline font-medium text-sm">{{wikiLabel .Sitename .WikiName .URL}}</a></td>
             <td class="px-4 py-3"><a href="{{.URL}}" target="_blank" class="text-sm text-gray-500 hover:text-gray-700">{{truncate .URL 40}}</a></td>
             <td class="px-4 py-3 text-sm text-gray-700">{{toa .ExtensionVersion}}</td>
             <td class="px-4 py-3 text-sm text-gray-400">{{toa .SnapshotAt}}</td>

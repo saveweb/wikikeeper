@@ -14,6 +14,7 @@ import (
 
 	"wikikeeper-backend/internal/config"
 	"wikikeeper-backend/internal/models"
+	"wikikeeper-backend/internal/repository"
 )
 
 func TestRenderPartialLoadsPageTemplate(t *testing.T) {
@@ -167,6 +168,36 @@ func TestWikiListRendersThumbnail(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), `src="/api/wikis/`+wikiID.String()+`/thumbnail"`)
+}
+
+func TestExtensionDetailUsesSitenameWhenWikiNameIsMissing(t *testing.T) {
+	wikiID := uuid.New()
+	sitename := "MoeGirl London Bridge"
+	p := &Pages{
+		cfg:         &config.Config{LogLevel: "INFO"},
+		templateDir: "../../web/templates",
+	}
+	p.baseTemplates = p.parseBaseTemplates()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/extensions/MoegirlLondonBridge", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, p.renderPartial(c, "extension_detail.html", "ext_wiki_rows", M{
+		"Wikis": []*repository.ExtensionWikiInfo{{
+			WikiID:   wikiID,
+			Sitename: &sitename,
+			URL:      "https://en.moegirl.org.cn/",
+		}},
+		"WikiPage":  1,
+		"WikiPages": 1,
+	}))
+
+	body := rec.Body.String()
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, body, `href="/wikis/`+wikiID.String()+`"`)
+	require.Contains(t, body, ">MoeGirl London Bridge</a>")
 }
 
 func TestStatsChartPointsAreChronological(t *testing.T) {
