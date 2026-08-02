@@ -28,7 +28,7 @@ func (p *Pages) Dashboard(c echo.Context) error {
 	wikis, _, err := wikiRepo.List(ctx, repository.ListOptions{
 		Page:     1,
 		PageSize: 10,
-		OrderBy:  "updated_at DESC",
+		OrderBy:  repository.WikiOrderUpdatedDesc,
 	})
 	if err == nil {
 		data["RecentWikis"] = wikis

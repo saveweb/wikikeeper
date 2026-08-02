@@ -285,6 +285,47 @@ func TestWikiRepository_List(t *testing.T) {
 	assert.Len(t, wikis, 5)
 }
 
+func TestParseWikiOrder(t *testing.T) {
+	tests := []struct {
+		name    string
+		in      string
+		want    WikiOrder
+		wantErr error
+	}{
+		{name: "updated", in: "updated_at DESC", want: WikiOrderUpdatedDesc},
+		{name: "created", in: "created_at DESC", want: WikiOrderCreatedDesc},
+		{name: "sitename", in: "sitename ASC", want: WikiOrderSitenameAsc},
+		{name: "unchecked", in: "last_check_at ASC NULLS FIRST", want: WikiOrderLastCheckAscNulls},
+		{name: "empty", want: WikiOrderUpdatedDesc},
+		{name: "unknown", in: "updated_at DESC; DROP TABLE wikis", wantErr: ErrInvalidWikiOrder},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseWikiOrder(tt.in)
+			assert.ErrorIs(t, err, tt.wantErr)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestWikiRepository_List_RejectsUnknownOrder(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewWikiRepository(db)
+	ctx := context.Background()
+
+	require.NoError(t, repo.Create(ctx, &models.Wiki{
+		ID:     uuid.New(),
+		URL:    "https://example.com",
+		Status: models.WikiStatusOK,
+	}))
+
+	_, _, err := repo.List(ctx, ListOptions{
+		OrderBy: WikiOrder("not_a_column DESC"),
+	})
+	assert.ErrorIs(t, err, ErrInvalidWikiOrder)
+}
+
 func TestWikiRepository_List_FilterByStatus(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewWikiRepository(db)

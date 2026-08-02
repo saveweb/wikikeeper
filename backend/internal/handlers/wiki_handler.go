@@ -65,12 +65,16 @@ func (h *WikiHandler) List(c echo.Context) error {
 
 	wikiRepo := repository.NewWikiRepository(h.db)
 	ctx := c.Request().Context()
+	orderBy, err := repository.ParseWikiOrder(req.OrderBy)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"detail": "Invalid order_by value"})
+	}
 
 	// Build list options
 	opts := repository.ListOptions{
 		Page:     req.Page,
 		PageSize: req.PageSize,
-		OrderBy:  req.OrderBy,
+		OrderBy:  orderBy,
 	}
 
 	if req.Status != "" {

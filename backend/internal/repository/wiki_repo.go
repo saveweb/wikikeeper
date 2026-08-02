@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -64,12 +65,64 @@ type ListOptions struct {
 	Status     *models.WikiStatus
 	HasArchive *bool
 	Search     string // Search in sitename
-	OrderBy    string // e.g., "updated_at DESC"
+	OrderBy    WikiOrder
+}
+
+// WikiOrder is a supported ordering for wiki lists.
+type WikiOrder string
+
+const (
+	WikiOrderUpdatedDesc       WikiOrder = "updated_at DESC"
+	WikiOrderCreatedDesc       WikiOrder = "created_at DESC"
+	WikiOrderSitenameAsc       WikiOrder = "sitename ASC"
+	WikiOrderLastCheckAscNulls WikiOrder = "last_check_at ASC NULLS FIRST"
+)
+
+// ErrInvalidWikiOrder indicates an unsupported wiki list ordering.
+var ErrInvalidWikiOrder = errors.New("invalid wiki order")
+
+func validateWikiOrder(order WikiOrder) error {
+	switch order {
+	case "", WikiOrderUpdatedDesc, WikiOrderCreatedDesc, WikiOrderSitenameAsc, WikiOrderLastCheckAscNulls:
+		return nil
+	default:
+		return ErrInvalidWikiOrder
+	}
+}
+
+// ParseWikiOrder maps an external value to a supported ordering.
+func ParseWikiOrder(value string) (WikiOrder, error) {
+	order := WikiOrder(value)
+	if err := validateWikiOrder(order); err != nil {
+		return "", err
+	}
+	if order == "" {
+		order = WikiOrderUpdatedDesc
+	}
+	return order, nil
+}
+
+func applyWikiOrder(query *gorm.DB, order WikiOrder) (*gorm.DB, error) {
+	switch order {
+	case "", WikiOrderUpdatedDesc:
+		return query.Order("updated_at DESC"), nil
+	case WikiOrderCreatedDesc:
+		return query.Order("created_at DESC"), nil
+	case WikiOrderSitenameAsc:
+		return query.Order("sitename ASC"), nil
+	case WikiOrderLastCheckAscNulls:
+		return query.Order("last_check_at ASC NULLS FIRST"), nil
+	default:
+		return nil, ErrInvalidWikiOrder
+	}
 }
 
 func (r *WikiRepository) List(ctx context.Context, opts ListOptions) ([]*models.Wiki, int64, error) {
 	var wikis []*models.Wiki
 	var total int64
+	if err := validateWikiOrder(opts.OrderBy); err != nil {
+		return nil, 0, err
+	}
 
 	query := r.db.WithContext(ctx).Model(&models.Wiki{})
 
@@ -108,14 +161,13 @@ func (r *WikiRepository) List(ctx context.Context, opts ListOptions) ([]*models.
 	offset := (opts.Page - 1) * opts.PageSize
 
 	// Apply ordering
-	if opts.OrderBy != "" {
-		query = query.Order(opts.OrderBy)
-	} else {
-		query = query.Order("updated_at DESC")
+	query, err := applyWikiOrder(query, opts.OrderBy)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	// Fetch results
-	err := query.Offset(offset).Limit(opts.PageSize).Find(&wikis).Error
+	err = query.Offset(offset).Limit(opts.PageSize).Find(&wikis).Error
 	if err != nil {
 		return nil, 0, err
 	}

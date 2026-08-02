@@ -51,9 +51,9 @@ func (p *Pages) WikiList(c echo.Context) error {
 	status := c.QueryParam("status")
 	archive := c.QueryParam("has_archive")
 	search := c.QueryParam("search")
-	orderBy := c.QueryParam("order_by")
-	if orderBy == "" {
-		orderBy = "updated_at DESC"
+	orderBy, err := repository.ParseWikiOrder(c.QueryParam("order_by"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid order_by value")
 	}
 
 	var statusFilter *models.WikiStatus
@@ -91,7 +91,7 @@ func (p *Pages) WikiList(c echo.Context) error {
 	data["Status"] = status
 	data["Archive"] = archive
 	data["Search"] = search
-	data["OrderBy"] = orderBy
+	data["OrderBy"] = string(orderBy)
 	data["BaseURL"] = "/wikis"
 
 	if p.isHTMX(c) {
