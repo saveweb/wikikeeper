@@ -151,7 +151,32 @@
     </div>
     {{end}} {{if .StatsJSON}}
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <h2 class="text-sm font-semibold text-gray-700 mb-3">Stats History</h2>
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <h2 class="text-sm font-semibold text-gray-700">Stats History</h2>
+            <fieldset class="flex flex-wrap items-center gap-x-3 gap-y-2" aria-label="Chart series">
+                <legend class="sr-only">Chart series</legend>
+                <label class="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                    <input type="checkbox" data-chart-series="pages" checked class="h-3.5 w-3.5 accent-blue-500">
+                    Pages
+                </label>
+                <label class="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                    <input type="checkbox" data-chart-series="articles" checked class="h-3.5 w-3.5 accent-violet-500">
+                    Articles
+                </label>
+                <label class="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                    <input type="checkbox" data-chart-series="edits" checked class="h-3.5 w-3.5 accent-amber-500">
+                    Edits
+                </label>
+                <label class="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                    <input type="checkbox" data-chart-series="images" checked class="h-3.5 w-3.5 accent-emerald-500">
+                    Images
+                </label>
+                <label class="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                    <input type="checkbox" data-chart-series="users" checked class="h-3.5 w-3.5 accent-rose-500">
+                    Users
+                </label>
+            </fieldset>
+        </div>
         <canvas id="stats-chart" height="100"></canvas>
     </div>
     {{end}} {{with .Extensions}}
@@ -340,14 +365,21 @@
             timeStyle: 'short',
             timeZone: 'UTC'
         }).format(new Date(Number(value)));
+        const formatCompact = (value) => new Intl.NumberFormat(undefined, {
+            notation: 'compact',
+            maximumFractionDigits: 1
+        }).format(value);
+        const formatNumber = (value) => new Intl.NumberFormat().format(value);
 
-        new Chart(document.getElementById('stats-chart'), {
+        const chart = new Chart(document.getElementById('stats-chart'), {
             type: 'line',
             data: {
                 datasets: [
-                    { label: 'Pages', data: series('pages'), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: false, tension: 0.1 },
-                    { label: 'Articles', data: series('articles'), borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', fill: false, tension: 0.1 },
-                    { label: 'Edits', data: series('edits'), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', fill: false, tension: 0.1, yAxisID: 'y1' }
+                    { field: 'pages', label: 'Pages', data: series('pages'), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: false, tension: 0.1, yAxisID: 'counts' },
+                    { field: 'articles', label: 'Articles', data: series('articles'), borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', fill: false, tension: 0.1, yAxisID: 'counts' },
+                    { field: 'edits', label: 'Edits', data: series('edits'), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', fill: false, tension: 0.1, yAxisID: 'counts' },
+                    { field: 'images', label: 'Images', data: series('images'), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: false, tension: 0.1, yAxisID: 'counts' },
+                    { field: 'users', label: 'Users', data: series('users'), borderColor: '#f43f5e', backgroundColor: 'rgba(244,63,94,0.1)', fill: false, tension: 0.1, yAxisID: 'users' }
                 ]
             },
             options: {
@@ -366,18 +398,44 @@
                             callback: formatDate
                         }
                     },
-                    y: { beginAtZero: true, title: { display: true, text: 'Pages / Articles' } },
-                    y1: { position: 'right', beginAtZero: true, title: { display: true, text: 'Edits' }, grid: { drawOnChartArea: false } }
+                    counts: {
+                        title: { display: true, text: 'Pages / Articles / Edits / Images' },
+                        ticks: { callback: formatCompact }
+                    },
+                    users: {
+                        position: 'right',
+                        title: { display: true, text: 'Users' },
+                        ticks: { callback: formatCompact },
+                        grid: { drawOnChartArea: false }
+                    }
                 },
                 plugins: {
-                    legend: { position: 'top' },
+                    legend: { display: false },
                     tooltip: {
                         callbacks: {
-                            title: (items) => items.length ? `${formatDateTime(items[0].parsed.x)} UTC` : ''
+                            title: (items) => items.length ? `${formatDateTime(items[0].parsed.x)} UTC` : '',
+                            label: (item) => `${item.dataset.label}: ${formatNumber(item.parsed.y)}`
                         }
                     }
                 }
             }
+        });
+
+        const selectors = document.querySelectorAll('[data-chart-series]');
+        const updateAxes = () => {
+            chart.options.scales.counts.display = chart.data.datasets.some((dataset, index) =>
+                dataset.yAxisID === 'counts' && chart.isDatasetVisible(index));
+            chart.options.scales.users.display = chart.data.datasets.some((dataset, index) =>
+                dataset.yAxisID === 'users' && chart.isDatasetVisible(index));
+        };
+        selectors.forEach((selector) => {
+            selector.addEventListener('change', () => {
+                const datasetIndex = chart.data.datasets.findIndex((dataset) => dataset.field === selector.dataset.chartSeries);
+                if (datasetIndex === -1) return;
+                chart.setDatasetVisibility(datasetIndex, selector.checked);
+                updateAxes();
+                chart.update();
+            });
         });
     })();
 </script>

@@ -21,6 +21,8 @@ type statsChartPoint struct {
 	Pages    int       `json:"pages"`
 	Articles int       `json:"articles"`
 	Edits    int       `json:"edits"`
+	Images   int       `json:"images"`
+	Users    int       `json:"users"`
 }
 
 func statsChartPoints(stats []*models.WikiStats) []statsChartPoint {
@@ -31,6 +33,8 @@ func statsChartPoints(stats []*models.WikiStats) []statsChartPoint {
 			Pages:    s.Pages,
 			Articles: s.Articles,
 			Edits:    s.Edits,
+			Images:   s.Images,
+			Users:    s.Users,
 		})
 	}
 	slices.SortFunc(points, func(a, b statsChartPoint) int {

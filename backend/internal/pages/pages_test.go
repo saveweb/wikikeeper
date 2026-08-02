@@ -234,8 +234,8 @@ func TestStatsChartPointsAreChronological(t *testing.T) {
 	older := newer.Add(-48 * time.Hour)
 
 	points := statsChartPoints([]*models.WikiStats{
-		{WikiID: wikiID, Time: newer, Pages: 20, Articles: 10, Edits: 30},
-		{WikiID: wikiID, Time: older, Pages: 15, Articles: 8, Edits: 25},
+		{WikiID: wikiID, Time: newer, Pages: 20, Articles: 10, Edits: 30, Images: 4, Users: 50},
+		{WikiID: wikiID, Time: older, Pages: 15, Articles: 8, Edits: 25, Images: 3, Users: 40},
 	})
 
 	require.Len(t, points, 2)
@@ -245,9 +245,37 @@ func TestStatsChartPointsAreChronological(t *testing.T) {
 	encoded, err := json.Marshal(points)
 	require.NoError(t, err)
 	require.JSONEq(t, `[
-		{"time":"2026-07-29T12:00:00Z","pages":15,"articles":8,"edits":25},
-		{"time":"2026-07-31T12:00:00Z","pages":20,"articles":10,"edits":30}
+		{"time":"2026-07-29T12:00:00Z","pages":15,"articles":8,"edits":25,"images":3,"users":40},
+		{"time":"2026-07-31T12:00:00Z","pages":20,"articles":10,"edits":30,"images":4,"users":50}
 	]`, string(encoded))
+}
+
+func TestWikiDetailRendersStatsChartSeriesSelector(t *testing.T) {
+	p := &Pages{
+		cfg:         &config.Config{LogLevel: "INFO"},
+		templateDir: "../../web/templates",
+	}
+	p.baseTemplates = p.parseBaseTemplates()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/wikis/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, p.render(c, "wiki_detail.html", M{
+		"Wiki": &models.Wiki{ID: uuid.New(), URL: "https://example.org", Status: models.WikiStatusOK},
+		"StatsJSON": toJS([]statsChartPoint{{
+			Time: time.Date(2026, time.July, 31, 12, 0, 0, 0, time.UTC),
+		}}),
+	}))
+
+	body := rec.Body.String()
+	require.Equal(t, http.StatusOK, rec.Code)
+	for _, series := range []string{"pages", "articles", "edits", "images", "users"} {
+		require.Contains(t, body, `data-chart-series="`+series+`"`)
+	}
+	require.Contains(t, body, "yAxisID: 'counts'")
+	require.Contains(t, body, "yAxisID: 'users'")
 }
 
 func TestWikiDetailRendersErrorsForPublicViewer(t *testing.T) {
