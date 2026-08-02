@@ -223,6 +223,7 @@ func (h *ExtensionsHandler) GetAllExtensionsStats(c echo.Context) error {
 	// Parse pagination parameters
 	page := c.QueryParam("page")
 	limit := c.QueryParam("limit")
+	search := c.QueryParam("search")
 
 	pageInt := 1
 	limitInt := 50
@@ -245,8 +246,9 @@ func (h *ExtensionsHandler) GetAllExtensionsStats(c echo.Context) error {
 	stats, total, err := extensionsRepo.GetAllExtensionsStats(
 		ctx,
 		repository.GetAllExtensionsStatsOptions{
-			Page:  pageInt,
-			Limit: limitInt,
+			Page:   pageInt,
+			Limit:  limitInt,
+			Search: search,
 		},
 	)
 	if err != nil {

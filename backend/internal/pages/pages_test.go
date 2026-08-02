@@ -25,6 +25,7 @@ func TestRenderPartialLoadsPageTemplate(t *testing.T) {
 		data         M
 		want         string
 		wantLink     string
+		wantTarget   string
 	}{
 		{
 			name:         "wiki list",
@@ -33,20 +34,22 @@ func TestRenderPartialLoadsPageTemplate(t *testing.T) {
 			data: M{
 				"Total": 0, "Page": 2, "PageSize": 20, "Pages": 3,
 				"Status": "", "Archive": "", "Search": "", "OrderBy": "updated_at DESC",
-				"BaseURL": "/wikis",
+				"BaseURL": "/wikis", "ListTarget": "#wiki-list-content",
 			},
-			want:     "0 wikis found",
-			wantLink: "/wikis?page=1",
+			want:       "0 wikis found",
+			wantLink:   "/wikis?page=1",
+			wantTarget: `hx-target="#wiki-list-content"`,
 		},
 		{
 			name:         "extension list",
 			pageFile:     "extension_list.html",
 			templateName: "ext_list_content",
 			data: M{
-				"Total": 0, "Page": 1, "PageSize": 50, "Pages": 0,
-				"Search": "", "Offset": 0, "BaseURL": "/extensions",
+				"Total": 0, "Page": 1, "PageSize": 50, "Pages": 2,
+				"Search": "", "Offset": 0, "BaseURL": "/extensions", "ListTarget": "#ext-list-content",
 			},
-			want: "0 extensions found",
+			want:       "0 extensions found",
+			wantTarget: `hx-target="#ext-list-content"`,
 		},
 	}
 
@@ -69,9 +72,34 @@ func TestRenderPartialLoadsPageTemplate(t *testing.T) {
 			if tt.wantLink != "" {
 				require.Contains(t, rec.Body.String(), tt.wantLink)
 			}
+			if tt.wantTarget != "" {
+				require.Contains(t, rec.Body.String(), tt.wantTarget)
+			}
 			require.False(t, strings.Contains(rec.Body.String(), "<!doctype html>"))
 		})
 	}
+}
+
+func TestExtensionListHasSingleSearchParameterSource(t *testing.T) {
+	p := &Pages{
+		cfg:         &config.Config{LogLevel: "INFO"},
+		templateDir: "../../web/templates",
+	}
+	p.baseTemplates = p.parseBaseTemplates()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/extensions?search=Parser", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, p.render(c, "extension_list.html", M{
+		"Search": "Parser",
+	}))
+
+	body := rec.Body.String()
+	require.Equal(t, 1, strings.Count(body, `name="search"`))
+	require.NotContains(t, body, "ext-search-form")
+	require.NotContains(t, body, "hx-include")
 }
 
 func TestWikiLabelFallsBackToHostname(t *testing.T) {

@@ -23,8 +23,9 @@ func (p *Pages) ExtensionList(c echo.Context) error {
 
 	extRepo := repository.NewExtensionsRepository(p.db)
 	extensions, total, err := extRepo.GetAllExtensionsStats(ctx, repository.GetAllExtensionsStatsOptions{
-		Page:  page,
-		Limit: limit,
+		Page:   page,
+		Limit:  limit,
+		Search: search,
 	})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
@@ -38,6 +39,7 @@ func (p *Pages) ExtensionList(c echo.Context) error {
 	data["Offset"] = (page - 1) * limit
 	data["Search"] = search
 	data["BaseURL"] = "/extensions"
+	data["ListTarget"] = "#ext-list-content"
 
 	if p.isHTMX(c) {
 		return p.renderPartial(c, "extension_list.html", "ext_list_content", data)

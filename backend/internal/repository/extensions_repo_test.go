@@ -77,6 +77,32 @@ func setupExtensionsTestDB(t *testing.T) (*ExtensionsRepository, uuid.UUID) {
 
 func strptr(value string) *string { return &value }
 
+func TestGetAllExtensionsStatsFiltersByName(t *testing.T) {
+	repo, _ := setupExtensionsTestDB(t)
+	require.NoError(t, repo.db.Exec(`
+		CREATE TABLE mv_extension_stats (
+			name TEXT PRIMARY KEY,
+			count INTEGER NOT NULL
+		)
+	`).Error)
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO mv_extension_stats(name, count) VALUES
+			('ParserFunctions', 100),
+			('VisualEditor', 80),
+			('CargoParser', 60)
+	`).Error)
+
+	stats, total, err := repo.GetAllExtensionsStats(context.Background(), GetAllExtensionsStatsOptions{
+		Page: 1, Limit: 50, Search: "parser",
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, total)
+	require.Equal(t, []*ExtensionStats{
+		{Name: "ParserFunctions", Count: 100},
+		{Name: "CargoParser", Count: 60},
+	}, stats)
+}
+
 func TestCreateSnapshotReusesContentAddressedSet(t *testing.T) {
 	repo, wikiID := setupExtensionsTestDB(t)
 	ctx := context.Background()

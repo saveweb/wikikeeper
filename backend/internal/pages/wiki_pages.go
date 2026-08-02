@@ -93,6 +93,7 @@ func (p *Pages) WikiList(c echo.Context) error {
 	data["Search"] = search
 	data["OrderBy"] = string(orderBy)
 	data["BaseURL"] = "/wikis"
+	data["ListTarget"] = "#wiki-list-content"
 
 	if p.isHTMX(c) {
 		return p.renderPartial(c, "wiki_list.html", "wiki_list_content", data)

@@ -423,8 +423,9 @@ type ExtensionStats struct {
 
 // GetAllExtensionsStatsOptions pagination options for GetAllExtensionsStats
 type GetAllExtensionsStatsOptions struct {
-	Page  int
-	Limit int
+	Page   int
+	Limit  int
+	Search string
 }
 
 // GetAllExtensionsStats gets statistics for all extensions (paginated)
@@ -441,21 +442,24 @@ func (r *ExtensionsRepository) GetAllExtensionsStats(ctx context.Context, opts G
 		opts.Limit = 50
 	}
 
-	// Get total count from materialized view
-	err := r.db.WithContext(ctx).Raw("SELECT COUNT(*) FROM mv_extension_stats").Scan(&total).Error
+	query := r.db.WithContext(ctx).Table("mv_extension_stats")
+	if opts.Search != "" {
+		query = query.Where("LOWER(name) LIKE LOWER(?)", "%"+opts.Search+"%")
+	}
+
+	// Count and select from the same filtered result set.
+	err := query.Count(&total).Error
 	if err != nil {
 		return nil, 0, err
 	}
 
 	// Get paginated data from materialized view
 	offset := (opts.Page - 1) * opts.Limit
-	query := `
-		SELECT name, count
-		FROM mv_extension_stats
-		ORDER BY count DESC, name ASC
-		LIMIT ? OFFSET ?
-	`
-	err = r.db.WithContext(ctx).Raw(query, opts.Limit, offset).Scan(&stats).Error
+	err = query.Select("name, count").
+		Order("count DESC, name ASC").
+		Limit(opts.Limit).
+		Offset(offset).
+		Scan(&stats).Error
 	if err != nil {
 		return nil, 0, err
 	}
