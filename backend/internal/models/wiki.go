@@ -60,12 +60,12 @@ type Wiki struct {
 	APIAvailable bool       `gorm:"not null;default:false" json:"api_available"`
 
 	// Collection tracking is separate from the last verified wiki status.
-	CollectionStatus    CollectionStatus `gorm:"type:varchar(20);not null;default:'pending';index" json:"collection_status"`
-	LastError           *string          `gorm:"type:text" json:"last_error"`
-	LastErrorAt         *time.Time       `json:"last_error_at,omitempty"`
-	LastSuccessAt       *time.Time       `gorm:"index" json:"last_success_at,omitempty"`
-	NextCheckAt         *time.Time       `gorm:"index" json:"next_check_at,omitempty"`
-	ConsecutiveFailures int              `gorm:"not null;default:0" json:"consecutive_failures"`
+	CollectionStatus    CollectionStatus `gorm:"type:varchar(20);not null;default:'pending';index" json:"stats_collection_status"`
+	LastError           *string          `gorm:"type:text" json:"stats_last_error"`
+	LastErrorAt         *time.Time       `json:"stats_last_error_at,omitempty"`
+	LastSuccessAt       *time.Time       `gorm:"index" json:"stats_last_success_at,omitempty"`
+	NextCheckAt         *time.Time       `gorm:"index" json:"stats_next_check_at,omitempty"`
+	ConsecutiveFailures int              `gorm:"not null;default:0" json:"stats_consecutive_failures"`
 
 	// Archive check status
 	ArchiveLastCheckAt *time.Time `gorm:"index" json:"archive_last_check_at,omitempty"`
@@ -75,7 +75,7 @@ type Wiki struct {
 	// Timestamps
 	CreatedAt   time.Time  `gorm:"not null;default:now();index" json:"created_at"`
 	UpdatedAt   time.Time  `gorm:"not null;default:now()" json:"updated_at"`
-	LastCheckAt *time.Time `gorm:"index" json:"last_check_at,omitempty"`
+	LastCheckAt *time.Time `gorm:"index" json:"stats_last_check_at,omitempty"`
 
 	// Settings
 	IsActive bool `gorm:"not null;default:true" json:"is_active,omitempty"`

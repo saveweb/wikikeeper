@@ -339,10 +339,10 @@
     <div class="grid grid-cols-2 gap-4 text-xs text-gray-400">
         <div>Created: {{toa .Wiki.CreatedAt}}</div>
         <div>Updated: {{toa .Wiki.UpdatedAt}}</div>
-        <div>Last Check: {{toa .Wiki.LastCheckAt}}</div>
-        <div>Last Success: {{toa .Wiki.LastSuccessAt}}</div>
-        <div>Next Check: {{toa .Wiki.NextCheckAt}}</div>
-        <div>Archive Check: {{toa .Wiki.ArchiveLastCheckAt}}</div>
+        <div>Last Stats Check: {{toa .Wiki.LastCheckAt}}</div>
+        <div>Last Stats Success: {{toa .Wiki.LastSuccessAt}}</div>
+        <div>Next Stats Check: {{toa .Wiki.NextCheckAt}}</div>
+        <div>Last Archive Check: {{toa .Wiki.ArchiveLastCheckAt}}</div>
     </div>
 </div>
 {{end}} {{define "head"}} {{if .StatsJSON}}

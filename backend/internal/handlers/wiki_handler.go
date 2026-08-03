@@ -252,9 +252,9 @@ func (h *WikiHandler) TriggerCheck(c echo.Context) error {
 			if time.Since(*wiki.LastCheckAt) < 1*time.Hour {
 				remainingTime := 1*time.Hour - time.Since(*wiki.LastCheckAt)
 				return c.JSON(http.StatusTooManyRequests, map[string]string{
-					"detail":        "Rate limit exceeded. Only 1 check per hour per wiki for anonymous users.",
-					"retry_after":   fmt.Sprintf("%.0f", remainingTime.Seconds()),
-					"last_check_at": wiki.LastCheckAt.UTC().Format(time.RFC3339),
+					"detail":              "Rate limit exceeded. Only 1 check per hour per wiki for anonymous users.",
+					"retry_after":         fmt.Sprintf("%.0f", remainingTime.Seconds()),
+					"stats_last_check_at": wiki.LastCheckAt.UTC().Format(time.RFC3339),
 				})
 			}
 		}
@@ -415,8 +415,6 @@ func (h *WikiHandler) CheckArchive(c echo.Context) error {
 		found, imported, updated, err := archiveService.CollectArchives(bgCtx, h.db, id, apiURL, indexURL)
 		if err != nil {
 			applogger.Log.Info("[Handler] Archive check failed for wiki", "wiki_id", id, "err", err)
-			// Update wiki with archive error
-			archiveService.UpdateWikiArchiveError(bgCtx, h.db, id, err)
 		} else {
 			applogger.Log.Info("[Handler] Archive check completed", "found", found, "imported", imported, "updated", updated)
 		}

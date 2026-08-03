@@ -139,6 +139,7 @@ func (s *ArchiveService) CheckArchive(ctx context.Context, apiURL, indexURL stri
 func (s *ArchiveService) CollectArchives(ctx context.Context, db *gorm.DB, wikiID uuid.UUID, apiURL, indexURL string) (found, imported, updated int, err error) {
 	archives, err := s.CheckArchive(ctx, apiURL, indexURL)
 	if err != nil {
+		s.updateWikiArchiveError(ctx, db, wikiID, err)
 		return 0, 0, 0, err
 	}
 
@@ -205,8 +206,7 @@ func (s *ArchiveService) updateWikiArchiveStatus(ctx context.Context, db *gorm.D
 	}
 }
 
-// UpdateWikiArchiveError records an archive check error (exported for handler use)
-func (s *ArchiveService) UpdateWikiArchiveError(ctx context.Context, db *gorm.DB, wikiID uuid.UUID, err error) {
+func (s *ArchiveService) updateWikiArchiveError(ctx context.Context, db *gorm.DB, wikiID uuid.UUID, err error) {
 	wikiRepo := repository.NewWikiRepository(db)
 	now := time.Now().UTC()
 	errMsg := err.Error()

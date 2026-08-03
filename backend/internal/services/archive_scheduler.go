@@ -125,7 +125,6 @@ func (s *ArchiveScheduler) run(ctx context.Context) {
 		found, imported, updated, err := s.archiveService.CollectArchives(ctx, s.db, wiki.ID, apiURL, indexURL)
 		if err != nil {
 			archiveSchedulerLog.Info("failed to check wiki", "wiki_id", wiki.ID, "error", err)
-			s.archiveService.UpdateWikiArchiveError(ctx, s.db, wiki.ID, err)
 			errorCount++
 		} else {
 			archiveSchedulerLog.Info("archive check completed", "found", found, "imported", imported, "updated", updated)

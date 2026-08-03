@@ -82,7 +82,7 @@ const (
 	WikiOrderUpdatedDesc       WikiOrder = "updated_at DESC"
 	WikiOrderCreatedDesc       WikiOrder = "created_at DESC"
 	WikiOrderSitenameAsc       WikiOrder = "sitename ASC"
-	WikiOrderLastCheckAscNulls WikiOrder = "last_check_at ASC NULLS FIRST"
+	WikiOrderLastCheckAscNulls WikiOrder = "stats_last_check_at ASC NULLS FIRST"
 )
 
 // ErrInvalidWikiOrder indicates an unsupported wiki list ordering.

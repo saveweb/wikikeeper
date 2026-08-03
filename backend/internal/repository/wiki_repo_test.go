@@ -311,7 +311,8 @@ func TestParseWikiOrder(t *testing.T) {
 		{name: "updated", in: "updated_at DESC", want: WikiOrderUpdatedDesc},
 		{name: "created", in: "created_at DESC", want: WikiOrderCreatedDesc},
 		{name: "sitename", in: "sitename ASC", want: WikiOrderSitenameAsc},
-		{name: "unchecked", in: "last_check_at ASC NULLS FIRST", want: WikiOrderLastCheckAscNulls},
+		{name: "unchecked", in: "stats_last_check_at ASC NULLS FIRST", want: WikiOrderLastCheckAscNulls},
+		{name: "ambiguous legacy unchecked", in: "last_check_at ASC NULLS FIRST", wantErr: ErrInvalidWikiOrder},
 		{name: "empty", want: WikiOrderUpdatedDesc},
 		{name: "unknown", in: "updated_at DESC; DROP TABLE wikis", wantErr: ErrInvalidWikiOrder},
 	}

@@ -40,7 +40,7 @@
                 <option value="updated_at DESC" {{if eq .OrderBy "updated_at DESC"}}selected{{end}}>Recently Updated</option>
                 <option value="created_at DESC" {{if eq .OrderBy "created_at DESC"}}selected{{end}}>Newest</option>
                 <option value="sitename ASC" {{if eq .OrderBy "sitename ASC"}}selected{{end}}>Name A-Z</option>
-                <option value="last_check_at ASC NULLS FIRST" {{if eq .OrderBy "last_check_at ASC NULLS FIRST"}}selected{{end}}>Unchecked First</option>
+                <option value="stats_last_check_at ASC NULLS FIRST" {{if eq .OrderBy "stats_last_check_at ASC NULLS FIRST"}}selected{{end}}>Unchecked First</option>
             </select>
         </form>
     </div>

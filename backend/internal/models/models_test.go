@@ -79,8 +79,22 @@ func TestWikiJSONSerialization(t *testing.T) {
 		t.Errorf("Expected status ok, got %v", result["status"])
 	}
 
-	if result["collection_status"] != "rate_limited" {
-		t.Errorf("Expected collection_status rate_limited, got %v", result["collection_status"])
+	if result["stats_collection_status"] != "rate_limited" {
+		t.Errorf("Expected stats_collection_status rate_limited, got %v", result["stats_collection_status"])
+	}
+	if _, exists := result["collection_status"]; exists {
+		t.Error("ambiguous collection_status field must not be serialized")
+	}
+	if result["stats_last_success_at"] == nil {
+		t.Error("expected stats_last_success_at")
+	}
+	if result["stats_next_check_at"] == nil {
+		t.Error("expected stats_next_check_at")
+	}
+	for _, ambiguous := range []string{"last_success_at", "next_check_at", "last_check_at", "last_error", "last_error_at", "consecutive_failures"} {
+		if _, exists := result[ambiguous]; exists {
+			t.Errorf("ambiguous %s field must not be serialized", ambiguous)
+		}
 	}
 
 	if result["has_archive"] != true {
@@ -99,18 +113,18 @@ func TestWikiStatsJSONSerialization(t *testing.T) {
 	httpStatus := 200
 
 	stats := WikiStats{
-		WikiID:        wikiID,
-		Time:          now,
-		Pages:         1000,
-		Articles:      500,
-		Edits:         5000,
-		Images:        200,
-		Users:         100,
-		ActiveUsers:   10,
-		Admins:        5,
-		Jobs:          3,
+		WikiID:         wikiID,
+		Time:           now,
+		Pages:          1000,
+		Articles:       500,
+		Edits:          5000,
+		Images:         200,
+		Users:          100,
+		ActiveUsers:    10,
+		Admins:         5,
+		Jobs:           3,
 		ResponseTimeMs: &responseTime,
-		HTTPStatus:    &httpStatus,
+		HTTPStatus:     &httpStatus,
 	}
 
 	// Test JSON marshaling
@@ -144,16 +158,16 @@ func TestWikiArchiveJSONSerialization(t *testing.T) {
 	itemSize := int64(1234567890)
 
 	archive := WikiArchive{
-		WikiID:           wikiID,
-		IAIdentifier:     "wiki-example-20240101",
-		AddedDate:        &now,
-		DumpDate:         &now,
-		ItemSize:         &itemSize,
-		HasXMLCurrent:    true,
-		HasXMLHistory:    true,
-		HasImagesDump:    false,
-		HasTitlesList:    true,
-		HasImagesList:    false,
+		WikiID:            wikiID,
+		IAIdentifier:      "wiki-example-20240101",
+		AddedDate:         &now,
+		DumpDate:          &now,
+		ItemSize:          &itemSize,
+		HasXMLCurrent:     true,
+		HasXMLHistory:     true,
+		HasImagesDump:     false,
+		HasTitlesList:     true,
+		HasImagesList:     false,
 		HasLegacyWikidump: false,
 	}
 
