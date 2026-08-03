@@ -10,6 +10,10 @@ import (
 	"wikikeeper-backend/internal/config"
 )
 
+func TestArchiveCheckInterval(t *testing.T) {
+	require.Equal(t, 30*24*time.Hour, archiveCheckInterval)
+}
+
 func TestArchiveSchedulerDisabledReturnsOnCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

@@ -15,7 +15,7 @@ import (
 var archiveSchedulerLog = applogger.With("component", "archive-scheduler")
 
 const (
-	archiveCheckInterval    = 3 * 24 * time.Hour
+	archiveCheckInterval    = 30 * 24 * time.Hour
 	archiveBusyPollInterval = time.Second
 	archiveIdlePollInterval = time.Minute
 )
