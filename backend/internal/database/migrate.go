@@ -70,6 +70,10 @@ var migrations = []Migration{
 		Version: 12,
 		Name:    "normalize_timestamps_to_utc",
 	},
+	{
+		Version: 13,
+		Name:    "mark_wiki_farms",
+	},
 }
 
 // RunMigrations executes all pending migrations

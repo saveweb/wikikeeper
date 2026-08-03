@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jellydator/ttlcache/v3"
 	"gorm.io/gorm"
+	"wikikeeper-backend/internal/farms"
 )
 
 // WikiRepository handles wiki database operations
@@ -25,6 +26,9 @@ func NewWikiRepository(db *gorm.DB) *WikiRepository {
 
 // Create creates a new wiki
 func (r *WikiRepository) Create(ctx context.Context, wiki *models.Wiki) error {
+	if wiki.Farm == nil {
+		wiki.Farm = farms.Detect(wiki.URL)
+	}
 	return r.db.WithContext(ctx).Create(wiki).Error
 }
 
@@ -64,9 +68,12 @@ type ListOptions struct {
 	PageSize   int
 	Status     *models.WikiStatus
 	HasArchive *bool
+	Farm       string
 	Search     string // Search in sitename
 	OrderBy    WikiOrder
 }
+
+const WikiFarmIndependentFilter = "_independent"
 
 // WikiOrder is a supported ordering for wiki lists.
 type WikiOrder string
@@ -133,6 +140,11 @@ func (r *WikiRepository) List(ctx context.Context, opts ListOptions) ([]*models.
 	if opts.HasArchive != nil {
 		query = query.Where("has_archive = ?", *opts.HasArchive)
 	}
+	if opts.Farm == WikiFarmIndependentFilter {
+		query = query.Where("farm IS NULL")
+	} else if opts.Farm != "" {
+		query = query.Where("farm = ?", opts.Farm)
+	}
 	if opts.Search != "" {
 		// Remove protocol from search term to match URLs with or without http/https
 		cleanSearch := strings.TrimPrefix(opts.Search, "http://")
@@ -173,6 +185,17 @@ func (r *WikiRepository) List(ctx context.Context, opts ListOptions) ([]*models.
 	}
 
 	return wikis, total, nil
+}
+
+// ListFarms returns the farm markers currently present in the wiki catalog.
+func (r *WikiRepository) ListFarms(ctx context.Context) ([]models.WikiFarm, error) {
+	var farms []models.WikiFarm
+	err := r.db.WithContext(ctx).Model(&models.Wiki{}).
+		Where("farm IS NOT NULL").
+		Distinct().
+		Order("farm ASC").
+		Pluck("farm", &farms).Error
+	return farms, err
 }
 
 // Update updates a wiki

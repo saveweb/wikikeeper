@@ -82,14 +82,16 @@ func TestGetAllExtensionsStatsFiltersByName(t *testing.T) {
 	require.NoError(t, repo.db.Exec(`
 		CREATE TABLE mv_extension_stats (
 			name TEXT PRIMARY KEY,
-			count INTEGER NOT NULL
+			count INTEGER NOT NULL,
+			all_count INTEGER NOT NULL
 		)
 	`).Error)
 	require.NoError(t, repo.db.Exec(`
-		INSERT INTO mv_extension_stats(name, count) VALUES
-			('ParserFunctions', 100),
-			('VisualEditor', 80),
-			('CargoParser', 60)
+		INSERT INTO mv_extension_stats(name, count, all_count) VALUES
+			('ParserFunctions', 100, 120),
+			('VisualEditor', 80, 90),
+			('CargoParser', 60, 70),
+			('FarmOnly', 0, 10)
 	`).Error)
 
 	stats, total, err := repo.GetAllExtensionsStats(context.Background(), GetAllExtensionsStatsOptions{
@@ -101,6 +103,49 @@ func TestGetAllExtensionsStatsFiltersByName(t *testing.T) {
 		{Name: "ParserFunctions", Count: 100},
 		{Name: "CargoParser", Count: 60},
 	}, stats)
+
+	stats, total, err = repo.GetAllExtensionsStats(context.Background(), GetAllExtensionsStatsOptions{
+		Page: 1, Limit: 50, Search: "farm", IncludeFarms: true,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Equal(t, []*ExtensionStats{{Name: "FarmOnly", Count: 10}}, stats)
+}
+
+func TestExtensionQueriesExcludeFarmsByDefault(t *testing.T) {
+	repo, independentWikiID := setupExtensionsTestDB(t)
+	ctx := context.Background()
+	farmWiki := &models.Wiki{ID: uuid.New(), URL: "https://example.shoutwiki.com", Status: models.WikiStatusOK}
+	require.NoError(t, NewWikiRepository(repo.db).Create(ctx, farmWiki))
+	require.Equal(t, models.WikiFarmShoutWiki, *farmWiki.Farm)
+
+	for _, wikiID := range []uuid.UUID{independentWikiID, farmWiki.ID} {
+		require.NoError(t, repo.CreateSnapshot(ctx, &models.WikiExtensionsSnapshot{
+			ID: uuid.New(), WikiID: wikiID, SnapshotAt: time.Now().UTC(),
+			Items: []models.WikiExtensionItem{{ExtType: "extension", Name: "Cite", Version: strptr("1.0")}},
+		}))
+	}
+
+	wikis, total, err := repo.GetWikisUsingExtension(ctx, "Cite", ExtensionWikisListOptions{Page: 1, Limit: 20})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, wikis, 1)
+	require.Equal(t, independentWikiID, wikis[0].WikiID)
+
+	wikis, total, err = repo.GetWikisUsingExtension(ctx, "Cite", ExtensionWikisListOptions{Page: 1, Limit: 20, IncludeFarms: true})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, total)
+	require.Len(t, wikis, 2)
+
+	versions, total, err := repo.GetExtensionVersionDistribution(ctx, "Cite", false)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.EqualValues(t, 1, versions[0].Count)
+
+	versions, total, err = repo.GetExtensionVersionDistribution(ctx, "Cite", true)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, total)
+	require.EqualValues(t, 2, versions[0].Count)
 }
 
 func TestCreateSnapshotReusesContentAddressedSet(t *testing.T) {

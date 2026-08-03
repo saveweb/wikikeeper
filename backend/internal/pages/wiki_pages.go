@@ -54,6 +54,7 @@ func (p *Pages) WikiList(c echo.Context) error {
 	pageSize := 20
 	status := c.QueryParam("status")
 	archive := c.QueryParam("has_archive")
+	farm := c.QueryParam("farm")
 	search := c.QueryParam("search")
 	orderBy, err := repository.ParseWikiOrder(c.QueryParam("order_by"))
 	if err != nil {
@@ -80,6 +81,7 @@ func (p *Pages) WikiList(c echo.Context) error {
 		PageSize:   pageSize,
 		Status:     statusFilter,
 		HasArchive: archiveFilter,
+		Farm:       farm,
 		Search:     search,
 		OrderBy:    orderBy,
 	})
@@ -94,7 +96,13 @@ func (p *Pages) WikiList(c echo.Context) error {
 	data["Pages"] = totalPages(total, pageSize)
 	data["Status"] = status
 	data["Archive"] = archive
+	data["Farm"] = farm
 	data["Search"] = search
+	farms, err := wikiRepo.ListFarms(ctx)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	data["Farms"] = farms
 	data["OrderBy"] = string(orderBy)
 	data["BaseURL"] = "/wikis"
 	data["ListTarget"] = "#wiki-list-content"

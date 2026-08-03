@@ -2,13 +2,18 @@
 <div class="space-y-4">
     <h1 class="text-2xl font-bold text-gray-900">Extensions</h1>
 
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+    <form class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 flex flex-wrap items-center gap-4"
+          hx-get="/extensions" hx-target="#ext-list-content" hx-swap="innerHTML"
+          hx-trigger="keyup changed delay:300ms from:input[name='search'], change from:input[name='include_farms']"
+          hx-push-url="true">
         <input type="text" name="search" value="{{.Search}}" placeholder="Search extensions..."
-               hx-get="/extensions" hx-target="#ext-list-content" hx-swap="innerHTML"
-               hx-trigger="keyup changed delay:300ms, search"
-               hx-push-url="true"
-               class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-    </div>
+               class="min-w-64 flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+        <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+            <input id="include-farms" type="checkbox" name="include_farms" value="true" {{if .IncludeFarms}}checked{{end}}
+                   class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
+            Include wiki farms
+        </label>
+    </form>
 
     <div id="ext-list-content">
         {{template "ext_list_content" .}}

@@ -135,8 +135,9 @@ func (h *ExtensionsHandler) GetExtensionsHistory(c echo.Context) error {
 
 // GetExtensionWikisRequest query parameters for GetExtensionWikis
 type GetExtensionWikisRequest struct {
-	Page  int `query:"page"`
-	Limit int `query:"limit"`
+	Page         int  `query:"page"`
+	Limit        int  `query:"limit"`
+	IncludeFarms bool `query:"include_farms"`
 }
 
 // GetExtensionWikis handles GET /api/extensions/:name/wikis
@@ -170,8 +171,9 @@ func (h *ExtensionsHandler) GetExtensionWikis(c echo.Context) error {
 		ctx,
 		extensionName,
 		repository.ExtensionWikisListOptions{
-			Page:  req.Page,
-			Limit: req.Limit,
+			Page:         req.Page,
+			Limit:        req.Limit,
+			IncludeFarms: req.IncludeFarms,
 		},
 	)
 
@@ -203,7 +205,8 @@ func (h *ExtensionsHandler) GetExtensionVersions(c echo.Context) error {
 	extensionsRepo := repository.NewExtensionsRepository(h.db)
 	ctx := c.Request().Context()
 
-	stats, total, err := extensionsRepo.GetExtensionVersionDistribution(ctx, extensionName)
+	includeFarms := c.QueryParam("include_farms") == "true"
+	stats, total, err := extensionsRepo.GetExtensionVersionDistribution(ctx, extensionName, includeFarms)
 	if err != nil {
 		extensionsLog.Info("Failed to get extension versions", "err", err, "extension", extensionName)
 		return c.JSON(http.StatusInternalServerError, map[string]string{
@@ -224,6 +227,7 @@ func (h *ExtensionsHandler) GetAllExtensionsStats(c echo.Context) error {
 	page := c.QueryParam("page")
 	limit := c.QueryParam("limit")
 	search := c.QueryParam("search")
+	includeFarms := c.QueryParam("include_farms") == "true"
 
 	pageInt := 1
 	limitInt := 50
@@ -246,9 +250,10 @@ func (h *ExtensionsHandler) GetAllExtensionsStats(c echo.Context) error {
 	stats, total, err := extensionsRepo.GetAllExtensionsStats(
 		ctx,
 		repository.GetAllExtensionsStatsOptions{
-			Page:   pageInt,
-			Limit:  limitInt,
-			Search: search,
+			Page:         pageInt,
+			Limit:        limitInt,
+			Search:       search,
+			IncludeFarms: includeFarms,
 		},
 	)
 	if err != nil {

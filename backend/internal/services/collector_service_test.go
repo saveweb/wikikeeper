@@ -29,6 +29,7 @@ func setupCollectorTestDB(t *testing.T) *gorm.DB {
 			api_url TEXT,
 			index_url TEXT,
 			wiki_name TEXT,
+			farm TEXT,
 			sitename TEXT,
 			lang TEXT,
 			db_type TEXT,

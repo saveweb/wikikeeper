@@ -148,7 +148,7 @@ func TestExtensionSetMigrationPostgres(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, workers+1, total)
 	require.Len(t, wikis, workers+1)
-	versions, versionTotal, err := repo.GetExtensionVersionDistribution(ctx, "Concurrent-"+marker)
+	versions, versionTotal, err := repo.GetExtensionVersionDistribution(ctx, "Concurrent-"+marker, false)
 	require.NoError(t, err)
 	require.EqualValues(t, workers+1, versionTotal)
 	require.Len(t, versions, 1)

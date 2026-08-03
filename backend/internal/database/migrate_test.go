@@ -85,3 +85,19 @@ func TestNormalizeTimestampsToUTCMigrationIsRegistered(t *testing.T) {
 		require.Contains(t, up, fragment)
 	}
 }
+
+func TestMarkWikiFarmsMigrationIsRegistered(t *testing.T) {
+	require.Equal(t, "mark_wiki_farms", getMigrationName(13))
+	up, err := readMigrationFile(13, "up")
+	require.NoError(t, err)
+	for _, fragment := range []string{
+		"ADD COLUMN farm",
+		"fandom\\.com",
+		"miraheze\\.org",
+		"shoutwiki\\.com",
+		"COUNT(*) FILTER (WHERE wiki.farm IS NULL)",
+		"COUNT(*) AS all_count",
+	} {
+		require.Contains(t, up, fragment)
+	}
+}

@@ -178,6 +178,36 @@ func TestCollectionStateMigrationPostgres(t *testing.T) {
 	require.NoError(t, db.Raw(`SELECT applied_at FROM schema_migrations WHERE version = 1`).Scan(&appliedAt).Error)
 	require.Equal(t, time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC), appliedAt.UTC())
 
+	require.NoError(t, db.Exec(`
+		INSERT INTO wikis (id, url) VALUES
+		('00000000-0000-0000-0000-000000000003', 'https://example.miraheze.org'),
+		('00000000-0000-0000-0000-000000000004', 'https://example.shoutwiki.com'),
+		('00000000-0000-0000-0000-000000000005', 'https://example.org')
+	`).Error)
+	up, err = readMigrationFile(13, "up")
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(up).Error)
+	for id, expected := range map[string]*string{
+		verifiedID:                             stringPtr("fandom"),
+		"00000000-0000-0000-0000-000000000003": stringPtr("miraheze"),
+		"00000000-0000-0000-0000-000000000004": stringPtr("shoutwiki"),
+		"00000000-0000-0000-0000-000000000005": nil,
+	} {
+		var farm *string
+		require.NoError(t, db.Raw(`SELECT farm FROM wikis WHERE id = ?`, id).Scan(&farm).Error)
+		require.Equal(t, expected, farm)
+	}
+	var viewColumns []string
+	require.NoError(t, db.Raw(`
+		SELECT attribute.attname
+		FROM pg_attribute attribute
+		WHERE attribute.attrelid = 'mv_extension_stats'::regclass
+		  AND attribute.attnum > 0
+		  AND NOT attribute.attisdropped
+		ORDER BY attribute.attnum
+	`).Scan(&viewColumns).Error)
+	require.Equal(t, []string{"name", "count", "all_count"}, viewColumns)
+
 	require.NoError(t, db.Exec(`DROP SCHEMA public CASCADE; CREATE SCHEMA public`).Error)
 	require.NoError(t, RunMigrations(db))
 	var appliedCount int64
@@ -191,3 +221,5 @@ func TestCollectionStateMigrationPostgres(t *testing.T) {
 	`).Scan(&nonUTCColumns).Error)
 	require.Zero(t, nonUTCColumns)
 }
+
+func stringPtr(value string) *string { return &value }

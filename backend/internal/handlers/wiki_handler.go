@@ -38,6 +38,7 @@ type ListWikisRequest struct {
 	PageSize   int    `query:"page_size"`
 	Status     string `query:"status"`
 	HasArchive *bool  `query:"has_archive"`
+	Farm       string `query:"farm"`
 	Search     string `query:"search"`
 	OrderBy    string `query:"order_by"`
 }
@@ -84,6 +85,7 @@ func (h *WikiHandler) List(c echo.Context) error {
 	if req.HasArchive != nil {
 		opts.HasArchive = req.HasArchive
 	}
+	opts.Farm = req.Farm
 	if req.Search != "" {
 		opts.Search = req.Search
 	}

@@ -20,12 +20,14 @@ func (p *Pages) ExtensionList(c echo.Context) error {
 	}
 	limit := 50
 	search := c.QueryParam("search")
+	includeFarms := c.QueryParam("include_farms") == "true"
 
 	extRepo := repository.NewExtensionsRepository(p.db)
 	extensions, total, err := extRepo.GetAllExtensionsStats(ctx, repository.GetAllExtensionsStatsOptions{
-		Page:   page,
-		Limit:  limit,
-		Search: search,
+		Page:         page,
+		Limit:        limit,
+		Search:       search,
+		IncludeFarms: includeFarms,
 	})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
@@ -38,6 +40,7 @@ func (p *Pages) ExtensionList(c echo.Context) error {
 	data["Pages"] = int(math.Ceil(float64(total) / float64(limit)))
 	data["Offset"] = (page - 1) * limit
 	data["Search"] = search
+	data["IncludeFarms"] = includeFarms
 	data["BaseURL"] = "/extensions"
 	data["ListTarget"] = "#ext-list-content"
 
@@ -63,11 +66,12 @@ func (p *Pages) ExtensionDetail(c echo.Context) error {
 		wikiPage = 1
 	}
 	wikiLimit := 20
+	includeFarms := c.QueryParam("include_farms") == "true"
 
 	extRepo := repository.NewExtensionsRepository(p.db)
 	data["Name"] = name
 
-	versions, totalWikis, err := extRepo.GetExtensionVersionDistribution(ctx, name)
+	versions, totalWikis, err := extRepo.GetExtensionVersionDistribution(ctx, name, includeFarms)
 	if err == nil {
 		var vi []versionInfo
 		for _, v := range versions {
@@ -86,8 +90,9 @@ func (p *Pages) ExtensionDetail(c echo.Context) error {
 	}
 
 	wikis, wikiTotal, err := extRepo.GetWikisUsingExtension(ctx, name, repository.ExtensionWikisListOptions{
-		Page:  wikiPage,
-		Limit: wikiLimit,
+		Page:         wikiPage,
+		Limit:        wikiLimit,
+		IncludeFarms: includeFarms,
 	})
 	if err == nil {
 		data["Wikis"] = wikis
@@ -95,6 +100,7 @@ func (p *Pages) ExtensionDetail(c echo.Context) error {
 		data["WikiPage"] = wikiPage
 		data["WikiPages"] = int(math.Ceil(float64(wikiTotal) / float64(wikiLimit)))
 	}
+	data["IncludeFarms"] = includeFarms
 
 	return p.render(c, "extension_detail.html", data)
 }

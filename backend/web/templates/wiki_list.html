@@ -27,6 +27,14 @@
                 <option value="true" {{if eq .Archive "true"}}selected{{end}}>Has Archive</option>
                 <option value="false" {{if eq .Archive "false"}}selected{{end}}>No Archive</option>
             </select>
+            <select name="farm" hx-get="/wikis" hx-target="#wiki-list-content" hx-swap="innerHTML" hx-include="#wiki-filters"
+                    hx-trigger="change" class="border border-gray-300 rounded px-3 py-2 text-sm">
+                <option value="" {{if eq .Farm ""}}selected{{end}}>All Farms</option>
+                <option value="_independent" {{if eq .Farm "_independent"}}selected{{end}}>Independent</option>
+                {{range .Farms}}
+                <option value="{{.}}" {{if eq (toa .) $.Farm}}selected{{end}}>{{.}}</option>
+                {{end}}
+            </select>
             <select name="order_by" hx-get="/wikis" hx-target="#wiki-list-content" hx-swap="innerHTML" hx-include="#wiki-filters"
                     hx-trigger="change" class="border border-gray-300 rounded px-3 py-2 text-sm">
                 <option value="updated_at DESC" {{if eq .OrderBy "updated_at DESC"}}selected{{end}}>Recently Updated</option>
@@ -67,6 +75,7 @@
                         <img src="/api/wikis/{{.ID}}/thumbnail" alt="" loading="lazy" class="h-10 w-10 rounded object-cover flex-none bg-gray-100">
                         <div class="min-w-0">
                             <a href="/wikis/{{.ID}}" class="text-primary-600 hover:underline font-medium">{{wikiLabel .Sitename .WikiName .URL}}</a>
+                            {{with .Farm}}<span class="ml-1 text-xs text-gray-500">{{.}}</span>{{end}}
                             {{if .WikiName}}<div class="text-xs text-gray-400">{{truncate (toa .WikiName) 30}}</div>{{end}}
                         </div>
                     </div>

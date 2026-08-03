@@ -26,6 +26,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 			api_url TEXT,
 			index_url TEXT,
 			wiki_name TEXT,
+			farm TEXT,
 			sitename TEXT,
 			lang TEXT,
 			db_type TEXT,
@@ -117,6 +118,21 @@ func TestWikiRepository_Create(t *testing.T) {
 	err := repo.Create(ctx, wiki)
 	require.NoError(t, err)
 	assert.NotEqual(t, uuid.UUID{}, wiki.ID)
+}
+
+func TestWikiRepository_CreateMarksKnownFarm(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewWikiRepository(db)
+	wiki := &models.Wiki{ID: uuid.New(), URL: "https://example.miraheze.org", Status: models.WikiStatusPending}
+
+	require.NoError(t, repo.Create(context.Background(), wiki))
+	require.NotNil(t, wiki.Farm)
+	require.Equal(t, models.WikiFarmMiraheze, *wiki.Farm)
+
+	stored, err := repo.GetByID(context.Background(), wiki.ID)
+	require.NoError(t, err)
+	require.NotNil(t, stored.Farm)
+	require.Equal(t, models.WikiFarmMiraheze, *stored.Farm)
 }
 
 func TestWikiRepository_GetByID(t *testing.T) {
@@ -363,6 +379,32 @@ func TestWikiRepository_List_FilterByHasArchive(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), total)
 	assert.True(t, wikis[0].HasArchive)
+}
+
+func TestWikiRepository_List_FilterByFarm(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewWikiRepository(db)
+	ctx := context.Background()
+
+	require.NoError(t, repo.Create(ctx, &models.Wiki{URL: "https://example.org", Status: models.WikiStatusOK}))
+	require.NoError(t, repo.Create(ctx, &models.Wiki{URL: "https://one.fandom.com", Status: models.WikiStatusOK}))
+	require.NoError(t, repo.Create(ctx, &models.Wiki{URL: "https://two.miraheze.org", Status: models.WikiStatusOK}))
+
+	wikis, total, err := repo.List(ctx, ListOptions{Farm: string(models.WikiFarmFandom)})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, wikis, 1)
+	require.Equal(t, models.WikiFarmFandom, *wikis[0].Farm)
+
+	wikis, total, err = repo.List(ctx, ListOptions{Farm: WikiFarmIndependentFilter})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, wikis, 1)
+	require.Nil(t, wikis[0].Farm)
+
+	farms, err := repo.ListFarms(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []models.WikiFarm{models.WikiFarmFandom, models.WikiFarmMiraheze}, farms)
 }
 
 func TestWikiRepository_List_Search(t *testing.T) {

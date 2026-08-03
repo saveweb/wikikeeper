@@ -297,18 +297,20 @@ func (r *ExtensionsRepository) loadSnapshotItems(ctx context.Context, snapshots 
 
 // ExtensionWikiInfo contains wiki and extension information
 type ExtensionWikiInfo struct {
-	WikiID           uuid.UUID `json:"wiki_id"`
-	WikiName         *string   `json:"wiki_name,omitempty"`
-	Sitename         *string   `json:"sitename,omitempty"`
-	URL              string    `json:"url"`
-	SnapshotAt       time.Time `json:"snapshot_at"`
-	ExtensionVersion *string   `json:"version,omitempty"`
+	WikiID           uuid.UUID        `json:"wiki_id"`
+	WikiName         *string          `json:"wiki_name,omitempty"`
+	Sitename         *string          `json:"sitename,omitempty"`
+	URL              string           `json:"url"`
+	Farm             *models.WikiFarm `json:"farm,omitempty"`
+	SnapshotAt       time.Time        `json:"snapshot_at"`
+	ExtensionVersion *string          `json:"version,omitempty"`
 }
 
 // ExtensionWikisListOptions pagination options for listing wikis
 type ExtensionWikisListOptions struct {
-	Page  int
-	Limit int
+	Page         int
+	Limit        int
+	IncludeFarms bool
 }
 
 // GetWikisUsingExtension gets wikis that are using a specific extension (paginated)
@@ -328,15 +330,15 @@ func (r *ExtensionsRepository) GetWikisUsingExtension(
 		opts.Limit = 20
 	}
 
-	const usageSQL = `
-		SELECT w.id AS wiki_id, w.wiki_name, w.sitename, w.url,
+	usageSQL := `
+		SELECT w.id AS wiki_id, w.wiki_name, w.sitename, w.url, w.farm,
 		       wes.snapshot_at, item.version AS extension_version
 		FROM wiki_extension_set_items item
 		JOIN wiki_extensions_snapshots wes ON wes.extension_set_id = item.set_id
 		JOIN wikis w ON w.id = wes.wiki_id
 		WHERE item.name = ? AND wes.valid_until IS NULL
 		UNION ALL
-		SELECT w.id AS wiki_id, w.wiki_name, w.sitename, w.url,
+		SELECT w.id AS wiki_id, w.wiki_name, w.sitename, w.url, w.farm,
 		       wes.snapshot_at, item.version AS extension_version
 		FROM wiki_extension_items item
 		JOIN wiki_extensions_snapshots wes ON wes.id = item.snapshot_id
@@ -344,6 +346,9 @@ func (r *ExtensionsRepository) GetWikisUsingExtension(
 		WHERE wes.extension_set_id IS NULL
 		  AND item.name = ? AND wes.valid_until IS NULL
 	`
+	if !opts.IncludeFarms {
+		usageSQL = "SELECT * FROM (" + usageSQL + ") AS all_usage WHERE farm IS NULL"
+	}
 
 	if err := r.db.WithContext(ctx).Raw(
 		"SELECT COUNT(*) FROM ("+usageSQL+") AS usage",
@@ -376,22 +381,29 @@ type ExtensionVersionStats struct {
 func (r *ExtensionsRepository) GetExtensionVersionDistribution(
 	ctx context.Context,
 	extensionName string,
+	includeFarms bool,
 ) ([]*ExtensionVersionStats, int64, error) {
 	var stats []*ExtensionVersionStats
 
 	// Use COALESCE to convert NULL to empty string
+	farmFilter := " AND w.farm IS NULL"
+	if includeFarms {
+		farmFilter = ""
+	}
 	query := `
 		WITH usage AS (
 			SELECT item.version
 			FROM wiki_extension_set_items item
 			JOIN wiki_extensions_snapshots wes ON wes.extension_set_id = item.set_id
-			WHERE item.name = ? AND wes.valid_until IS NULL
+			JOIN wikis w ON w.id = wes.wiki_id
+			WHERE item.name = ? AND wes.valid_until IS NULL` + farmFilter + `
 			UNION ALL
 			SELECT item.version
 			FROM wiki_extension_items item
 			JOIN wiki_extensions_snapshots wes ON wes.id = item.snapshot_id
+			JOIN wikis w ON w.id = wes.wiki_id
 			WHERE wes.extension_set_id IS NULL
-			  AND item.name = ? AND wes.valid_until IS NULL
+			  AND item.name = ? AND wes.valid_until IS NULL` + farmFilter + `
 		)
 		SELECT
 			COALESCE(version, '') as version,
@@ -423,9 +435,10 @@ type ExtensionStats struct {
 
 // GetAllExtensionsStatsOptions pagination options for GetAllExtensionsStats
 type GetAllExtensionsStatsOptions struct {
-	Page   int
-	Limit  int
-	Search string
+	Page         int
+	Limit        int
+	Search       string
+	IncludeFarms bool
 }
 
 // GetAllExtensionsStats gets statistics for all extensions (paginated)
@@ -442,7 +455,11 @@ func (r *ExtensionsRepository) GetAllExtensionsStats(ctx context.Context, opts G
 		opts.Limit = 50
 	}
 
-	query := r.db.WithContext(ctx).Table("mv_extension_stats")
+	countColumn := "count"
+	if opts.IncludeFarms {
+		countColumn = "all_count"
+	}
+	query := r.db.WithContext(ctx).Table("mv_extension_stats").Where(countColumn + " > 0")
 	if opts.Search != "" {
 		query = query.Where("LOWER(name) LIKE LOWER(?)", "%"+opts.Search+"%")
 	}
@@ -455,7 +472,7 @@ func (r *ExtensionsRepository) GetAllExtensionsStats(ctx context.Context, opts G
 
 	// Get paginated data from materialized view
 	offset := (opts.Page - 1) * opts.Limit
-	err = query.Select("name, count").
+	err = query.Select("name, " + countColumn + " AS count").
 		Order("count DESC, name ASC").
 		Limit(opts.Limit).
 		Offset(offset).

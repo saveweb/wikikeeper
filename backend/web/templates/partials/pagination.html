@@ -4,8 +4,8 @@
     <span class="text-sm text-gray-500">Page {{.Page}} of {{.Pages}} ({{.Total}} results)</span>
     <div class="flex gap-1">
         {{if gt .Page 1}}
-        <a href="{{.BaseURL}}?page={{sub .Page 1}}&page_size={{.PageSize}}&status={{.Status}}&has_archive={{.Archive}}&search={{.Search}}&order_by={{.OrderBy}}"
-           hx-get="{{.BaseURL}}?page={{sub .Page 1}}&page_size={{.PageSize}}&status={{.Status}}&has_archive={{.Archive}}&search={{.Search}}&order_by={{.OrderBy}}"
+        <a href="{{.BaseURL}}?page={{sub .Page 1}}&page_size={{.PageSize}}&status={{.Status}}&has_archive={{.Archive}}&farm={{.Farm}}&search={{.Search}}&order_by={{.OrderBy}}&include_farms={{.IncludeFarms}}"
+           hx-get="{{.BaseURL}}?page={{sub .Page 1}}&page_size={{.PageSize}}&status={{.Status}}&has_archive={{.Archive}}&farm={{.Farm}}&search={{.Search}}&order_by={{.OrderBy}}&include_farms={{.IncludeFarms}}"
            hx-target="{{.ListTarget}}" hx-swap="innerHTML"
            class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-100">&larr;</a>
         {{end}}
@@ -20,8 +20,8 @@
             {{if eq $i $.Page}}
             <span class="px-3 py-1 bg-primary-600 text-white rounded text-sm">{{$i}}</span>
             {{else}}
-            <a href="{{$.BaseURL}}?page={{$i}}&page_size={{$.PageSize}}&status={{$.Status}}&has_archive={{$.Archive}}&search={{$.Search}}&order_by={{$.OrderBy}}"
-               hx-get="{{$.BaseURL}}?page={{$i}}&page_size={{$.PageSize}}&status={{$.Status}}&has_archive={{$.Archive}}&search={{$.Search}}&order_by={{$.OrderBy}}"
+            <a href="{{$.BaseURL}}?page={{$i}}&page_size={{$.PageSize}}&status={{$.Status}}&has_archive={{$.Archive}}&farm={{$.Farm}}&search={{$.Search}}&order_by={{$.OrderBy}}&include_farms={{$.IncludeFarms}}"
+               hx-get="{{$.BaseURL}}?page={{$i}}&page_size={{$.PageSize}}&status={{$.Status}}&has_archive={{$.Archive}}&farm={{$.Farm}}&search={{$.Search}}&order_by={{$.OrderBy}}&include_farms={{$.IncludeFarms}}"
                hx-target="{{$.ListTarget}}" hx-swap="innerHTML"
                class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-100">{{$i}}</a>
             {{end}}
@@ -29,8 +29,8 @@
         {{end}}
         
         {{if lt .Page .Pages}}
-        <a href="{{.BaseURL}}?page={{add .Page 1}}&page_size={{.PageSize}}&status={{.Status}}&has_archive={{.Archive}}&search={{.Search}}&order_by={{.OrderBy}}"
-           hx-get="{{.BaseURL}}?page={{add .Page 1}}&page_size={{.PageSize}}&status={{.Status}}&has_archive={{.Archive}}&search={{.Search}}&order_by={{.OrderBy}}"
+        <a href="{{.BaseURL}}?page={{add .Page 1}}&page_size={{.PageSize}}&status={{.Status}}&has_archive={{.Archive}}&farm={{.Farm}}&search={{.Search}}&order_by={{.OrderBy}}&include_farms={{.IncludeFarms}}"
+           hx-get="{{.BaseURL}}?page={{add .Page 1}}&page_size={{.PageSize}}&status={{.Status}}&has_archive={{.Archive}}&farm={{.Farm}}&search={{.Search}}&order_by={{.OrderBy}}&include_farms={{.IncludeFarms}}"
            hx-target="{{.ListTarget}}" hx-swap="innerHTML"
            class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-100">&rarr;</a>
         {{end}}

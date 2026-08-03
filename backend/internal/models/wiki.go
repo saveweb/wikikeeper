@@ -10,6 +10,15 @@ import (
 // WikiStatus represents the status of a wiki
 type WikiStatus string
 
+// WikiFarm identifies a shared wiki hosting provider.
+type WikiFarm string
+
+const (
+	WikiFarmFandom    WikiFarm = "fandom"
+	WikiFarmMiraheze  WikiFarm = "miraheze"
+	WikiFarmShoutWiki WikiFarm = "shoutwiki"
+)
+
 const (
 	WikiStatusPending WikiStatus = "pending"
 	WikiStatusOK      WikiStatus = "ok"
@@ -35,6 +44,7 @@ type Wiki struct {
 	APIURL   *string   `gorm:"type:varchar(2048);index" json:"api_url"`
 	IndexURL *string   `gorm:"type:varchar(2048)" json:"index_url,omitempty"`
 	WikiName *string   `gorm:"type:varchar(255)" json:"wiki_name,omitempty"`
+	Farm     *WikiFarm `gorm:"type:varchar(50);index" json:"farm,omitempty"`
 
 	// Metadata from siteinfo.general
 	Sitename         *string `gorm:"type:varchar(255);index" json:"sitename"`
