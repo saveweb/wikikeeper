@@ -390,12 +390,19 @@ func TestWikiRepository_List_FilterByFarm(t *testing.T) {
 	require.NoError(t, repo.Create(ctx, &models.Wiki{URL: "https://example.org", Status: models.WikiStatusOK}))
 	require.NoError(t, repo.Create(ctx, &models.Wiki{URL: "https://one.fandom.com", Status: models.WikiStatusOK}))
 	require.NoError(t, repo.Create(ctx, &models.Wiki{URL: "https://two.miraheze.org", Status: models.WikiStatusOK}))
+	require.NoError(t, repo.Create(ctx, &models.Wiki{URL: "https://three.wikioasis.org", Status: models.WikiStatusOK}))
 
 	wikis, total, err := repo.List(ctx, ListOptions{Farm: string(models.WikiFarmFandom)})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, total)
 	require.Len(t, wikis, 1)
 	require.Equal(t, models.WikiFarmFandom, *wikis[0].Farm)
+
+	wikis, total, err = repo.List(ctx, ListOptions{Farm: string(models.WikiFarmWikiOasis)})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, wikis, 1)
+	require.Equal(t, models.WikiFarmWikiOasis, *wikis[0].Farm)
 
 	wikis, total, err = repo.List(ctx, ListOptions{Farm: WikiFarmIndependentFilter})
 	require.NoError(t, err)
@@ -405,7 +412,7 @@ func TestWikiRepository_List_FilterByFarm(t *testing.T) {
 
 	farms, err := repo.ListFarms(ctx)
 	require.NoError(t, err)
-	require.Equal(t, []models.WikiFarm{models.WikiFarmFandom, models.WikiFarmMiraheze}, farms)
+	require.Equal(t, []models.WikiFarm{models.WikiFarmFandom, models.WikiFarmMiraheze, models.WikiFarmWikiOasis}, farms)
 }
 
 func TestWikiRepository_List_Search(t *testing.T) {

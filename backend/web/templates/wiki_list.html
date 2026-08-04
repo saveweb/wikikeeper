@@ -29,7 +29,7 @@
             </select>
             <select name="farm" hx-get="/wikis" hx-target="#wiki-list-content" hx-swap="innerHTML" hx-include="#wiki-filters"
                     hx-trigger="change" class="border border-gray-300 rounded px-3 py-2 text-sm">
-                <option value="" {{if eq .Farm ""}}selected{{end}}>All Farms</option>
+                <option value="" {{if eq .Farm ""}}selected{{end}}>All Wikis</option>
                 <option value="_independent" {{if eq .Farm "_independent"}}selected{{end}}>Independent</option>
                 {{range .Farms}}
                 <option value="{{.}}" {{if eq (toa .) $.Farm}}selected{{end}}>{{.}}</option>

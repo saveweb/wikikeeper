@@ -17,6 +17,7 @@ const (
 	WikiFarmFandom    WikiFarm = "fandom"
 	WikiFarmMiraheze  WikiFarm = "miraheze"
 	WikiFarmShoutWiki WikiFarm = "shoutwiki"
+	WikiFarmWikiOasis WikiFarm = "wikioasis"
 )
 
 const (

@@ -101,3 +101,10 @@ func TestMarkWikiFarmsMigrationIsRegistered(t *testing.T) {
 		require.Contains(t, up, fragment)
 	}
 }
+
+func TestMarkWikiOasisFarmMigrationIsRegistered(t *testing.T) {
+	require.Equal(t, "mark_wikioasis_farm", getMigrationName(14))
+	up, err := readMigrationFile(14, "up")
+	require.NoError(t, err)
+	require.Contains(t, up, "wikioasis\\.org")
+}

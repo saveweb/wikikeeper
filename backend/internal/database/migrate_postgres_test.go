@@ -182,7 +182,8 @@ func TestCollectionStateMigrationPostgres(t *testing.T) {
 		INSERT INTO wikis (id, url) VALUES
 		('00000000-0000-0000-0000-000000000003', 'https://example.miraheze.org'),
 		('00000000-0000-0000-0000-000000000004', 'https://example.shoutwiki.com'),
-		('00000000-0000-0000-0000-000000000005', 'https://example.org')
+		('00000000-0000-0000-0000-000000000005', 'https://example.org'),
+		('00000000-0000-0000-0000-000000000006', 'https://example.wikioasis.org')
 	`).Error)
 	up, err = readMigrationFile(13, "up")
 	require.NoError(t, err)
@@ -192,11 +193,18 @@ func TestCollectionStateMigrationPostgres(t *testing.T) {
 		"00000000-0000-0000-0000-000000000003": stringPtr("miraheze"),
 		"00000000-0000-0000-0000-000000000004": stringPtr("shoutwiki"),
 		"00000000-0000-0000-0000-000000000005": nil,
+		"00000000-0000-0000-0000-000000000006": nil,
 	} {
 		var farm *string
 		require.NoError(t, db.Raw(`SELECT farm FROM wikis WHERE id = ?`, id).Scan(&farm).Error)
 		require.Equal(t, expected, farm)
 	}
+	up, err = readMigrationFile(14, "up")
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(up).Error)
+	var wikiOasisFarm *string
+	require.NoError(t, db.Raw(`SELECT farm FROM wikis WHERE id = ?`, "00000000-0000-0000-0000-000000000006").Scan(&wikiOasisFarm).Error)
+	require.Equal(t, stringPtr("wikioasis"), wikiOasisFarm)
 	var viewColumns []string
 	require.NoError(t, db.Raw(`
 		SELECT attribute.attname
