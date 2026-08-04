@@ -58,14 +58,36 @@ type ArchiveInfo struct {
 // scrapeSearchResult represents Scrape API response
 type scrapeSearchResult struct {
 	Items []struct {
-		Identifier  string `json:"identifier"`
-		AddedDate   string `json:"addeddate,omitempty"`
-		OriginalURL string `json:"originalurl,omitempty"`
+		Identifier  string     `json:"identifier"`
+		AddedDate   string     `json:"addeddate,omitempty"`
+		OriginalURL stringList `json:"originalurl,omitempty"`
 	} `json:"items"`
 	Cursor string `json:"cursor,omitempty"`
 	Error  string `json:"error,omitempty"`
 	Count  int    `json:"count,omitempty"`
 	Total  int    `json:"total,omitempty"`
+}
+
+type stringList []string
+
+func (s *stringList) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*s = nil
+		return nil
+	}
+
+	var values []string
+	if err := json.Unmarshal(data, &values); err == nil {
+		*s = values
+		return nil
+	}
+
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf("expected string or array of strings: %w", err)
+	}
+	*s = []string{value}
+	return nil
 }
 
 // ArchiveMetadata represents Archive.org item metadata
@@ -312,9 +334,9 @@ func (s *ArchiveService) searchArchive(ctx context.Context, searchURL string) ([
 }
 
 type archiveSearchResultDoc struct {
-	Identifier  string `json:"identifier"`
-	AddedDate   string `json:"addeddate"`
-	OriginalURL string `json:"originalurl,omitempty"`
+	Identifier  string     `json:"identifier"`
+	AddedDate   string     `json:"addeddate"`
+	OriginalURL stringList `json:"originalurl,omitempty"`
 }
 
 // parseArchiveItem parses a single archive item and fetches its metadata
