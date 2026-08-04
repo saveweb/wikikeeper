@@ -18,6 +18,7 @@ services:
       timeout: 5s
       retries: 5
     shm_size: 2g
+    restart: unless-stopped
 
   backend:
     build:
