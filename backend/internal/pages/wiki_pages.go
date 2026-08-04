@@ -206,6 +206,40 @@ func (p *Pages) WikiDetail(c echo.Context) error {
 	return p.render(c, "wiki_detail.html", data)
 }
 
+func (p *Pages) WikiStatsEmbed(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid wiki ID")
+	}
+
+	ctx := c.Request().Context()
+	wikiRepo := repository.NewWikiRepository(p.db)
+	wiki, err := wikiRepo.GetByID(ctx, id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return echo.NewHTTPError(http.StatusNotFound, "Wiki not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+
+	statsRepo := repository.NewStatsRepository(p.db)
+	statsHistory, err := statsRepo.GetByWikiID(ctx, id, 0)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	if len(statsHistory) < 2 {
+		return echo.NewHTTPError(http.StatusNotFound, "Stats history is not available")
+	}
+
+	c.Response().Header().Set("Content-Security-Policy", "frame-ancestors *")
+	c.Response().Header().Del("X-Frame-Options")
+	return p.renderPartial(c, "stats_embed.html", "stats_embed", M{
+		"Wiki":      wiki,
+		"WikiLabel": wikiLabel(wiki.Sitename, wiki.WikiName, wiki.URL),
+		"StatsJSON": toJS(statsChartPoints(statsHistory)),
+	})
+}
+
 func (p *Pages) TriggerCheck(c echo.Context) error {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {

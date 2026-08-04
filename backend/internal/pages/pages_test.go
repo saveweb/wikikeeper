@@ -274,8 +274,42 @@ func TestWikiDetailRendersStatsChartSeriesSelector(t *testing.T) {
 	for _, series := range []string{"pages", "articles", "edits", "images", "users"} {
 		require.Contains(t, body, `data-chart-series="`+series+`"`)
 	}
-	require.Contains(t, body, "yAxisID: 'counts'")
-	require.Contains(t, body, "yAxisID: 'users'")
+	require.Contains(t, body, `id="open-stats-embed"`)
+	require.Contains(t, body, `/wikis/`)
+	require.Contains(t, body, `/stats/embed`)
+	require.Contains(t, body, `src="/static/stats-chart.js"`)
+	require.Contains(t, body, `id="stats-chart-data"`)
+}
+
+func TestStatsEmbedRendersStandaloneChart(t *testing.T) {
+	wikiID := uuid.New()
+	p := &Pages{
+		cfg:         &config.Config{LogLevel: "INFO"},
+		templateDir: "../../web/templates",
+	}
+	p.baseTemplates = p.parseBaseTemplates()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/wikis/"+wikiID.String()+"/stats/embed", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, p.renderPartial(c, "stats_embed.html", "stats_embed", M{
+		"Wiki":      &models.Wiki{ID: wikiID, URL: "https://example.org"},
+		"WikiLabel": "Example Wiki",
+		"StatsJSON": toJS([]statsChartPoint{{
+			Time: time.Date(2026, time.July, 31, 12, 0, 0, 0, time.UTC),
+		}}),
+	}))
+
+	body := rec.Body.String()
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, body, "<!doctype html>")
+	require.Contains(t, body, "Example Wiki Stats History - WikiKeeper")
+	require.Contains(t, body, `href="/wikis/`+wikiID.String()+`"`)
+	require.Contains(t, body, `data-fill-container`)
+	require.Contains(t, body, `src="/static/stats-chart.js"`)
+	require.NotContains(t, body, "<nav")
 }
 
 func TestWikiDetailRendersErrorsForPublicViewer(t *testing.T) {

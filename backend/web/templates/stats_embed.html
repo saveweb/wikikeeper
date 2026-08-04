@@ -1,0 +1,68 @@
+{{define "stats_embed"}}
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>{{.WikiLabel}} Stats History - WikiKeeper</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+        <style>
+            html,
+            body {
+                height: 100%;
+                margin: 0;
+            }
+        </style>
+    </head>
+    <body class="bg-white text-gray-900">
+        <main class="flex h-full min-h-[320px] flex-col p-4">
+            <header class="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <h1 class="truncate text-sm font-semibold text-gray-800">
+                        {{.WikiLabel}}
+                    </h1>
+                    <a
+                        href="/wikis/{{.Wiki.ID}}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="text-xs text-blue-600 hover:underline"
+                        >Stats History on WikiKeeper</a
+                    >
+                </div>
+                <fieldset
+                    class="flex flex-wrap items-center justify-end gap-x-3 gap-y-2"
+                    aria-label="Chart series"
+                >
+                    <legend class="sr-only">Chart series</legend>
+                    <label class="inline-flex cursor-pointer items-center gap-1.5 text-xs text-gray-600">
+                        <input type="checkbox" data-chart-series="pages" checked class="h-3.5 w-3.5 accent-blue-500" />
+                        Pages
+                    </label>
+                    <label class="inline-flex cursor-pointer items-center gap-1.5 text-xs text-gray-600">
+                        <input type="checkbox" data-chart-series="articles" checked class="h-3.5 w-3.5 accent-violet-500" />
+                        Articles
+                    </label>
+                    <label class="inline-flex cursor-pointer items-center gap-1.5 text-xs text-gray-600">
+                        <input type="checkbox" data-chart-series="edits" checked class="h-3.5 w-3.5 accent-amber-500" />
+                        Edits
+                    </label>
+                    <label class="inline-flex cursor-pointer items-center gap-1.5 text-xs text-gray-600">
+                        <input type="checkbox" data-chart-series="images" checked class="h-3.5 w-3.5 accent-emerald-500" />
+                        Images
+                    </label>
+                    <label class="inline-flex cursor-pointer items-center gap-1.5 text-xs text-gray-600">
+                        <input type="checkbox" data-chart-series="users" checked class="h-3.5 w-3.5 accent-rose-500" />
+                        Users
+                    </label>
+                </fieldset>
+            </header>
+            <div class="relative min-h-0 flex-1">
+                <canvas id="stats-chart" data-fill-container></canvas>
+            </div>
+        </main>
+        <script id="stats-chart-data" type="application/json">{{.StatsJSON}}</script>
+        <script src="/static/stats-chart.js"></script>
+    </body>
+</html>
+{{end}}
