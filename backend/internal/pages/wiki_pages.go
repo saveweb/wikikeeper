@@ -173,6 +173,7 @@ func (p *Pages) WikiDetail(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	data["Wiki"] = wiki
+	data["Title"] = wikiLabel(wiki.Sitename, wiki.WikiName, wiki.URL) + " - Wiki Detail"
 
 	statsRepo := repository.NewStatsRepository(p.db)
 	latestStats, err := statsRepo.GetLatestByWikiID(ctx, id)

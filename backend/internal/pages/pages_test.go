@@ -279,6 +279,7 @@ func TestWikiDetailRendersStatsChartSeriesSelector(t *testing.T) {
 }
 
 func TestWikiDetailRendersErrorsForPublicViewer(t *testing.T) {
+	sitename := `Example & Test Wiki`
 	statsError := `HTTP 429: <script>alert("not executable")</script>`
 	archiveError := "archive lookup timed out"
 	statsErrorAt := time.Date(2026, time.July, 31, 4, 25, 57, 0, time.UTC)
@@ -296,11 +297,12 @@ func TestWikiDetailRendersErrorsForPublicViewer(t *testing.T) {
 	c := e.NewContext(req, rec)
 
 	require.NoError(t, p.render(c, "wiki_detail.html", M{
-		"Title":   "Wiki Detail",
+		"Title":   sitename + " - Wiki Detail",
 		"IsAdmin": false,
 		"Wiki": &models.Wiki{
 			ID:                 uuid.New(),
 			URL:                "https://example.fandom.com",
+			Sitename:           &sitename,
 			Status:             models.WikiStatusError,
 			CollectionStatus:   models.CollectionStatusRateLimited,
 			LastError:          &statsError,
@@ -312,6 +314,7 @@ func TestWikiDetailRendersErrorsForPublicViewer(t *testing.T) {
 
 	body := rec.Body.String()
 	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, body, "<title>Example &amp; Test Wiki - Wiki Detail - WikiKeeper</title>")
 	require.Contains(t, body, "Last Stats Error")
 	require.Contains(t, body, "Last Archive Error")
 	require.Contains(t, body, "Last Stats Check")
