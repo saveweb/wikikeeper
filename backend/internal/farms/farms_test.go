@@ -18,8 +18,11 @@ func TestDetect(t *testing.T) {
 		{url: "https://example.shoutwiki.com/wiki/Main_Page", farm: farmPtr(models.WikiFarmShoutWiki)},
 		{url: "https://example.wikioasis.org/wiki/Main_Page", farm: farmPtr(models.WikiFarmWikiOasis)},
 		{url: "https://wikioasis.org", farm: farmPtr(models.WikiFarmWikiOasis)},
+		{url: "https://minecraft.wiki.gg/wiki/Main_Page", farm: farmPtr(models.WikiFarmWikiGG)},
+		{url: "https://wiki.gg", farm: farmPtr(models.WikiFarmWikiGG)},
 		{url: "https://notfandom.com", farm: nil},
 		{url: "https://notwikioasis.org", farm: nil},
+		{url: "https://notwiki.gg", farm: nil},
 		{url: "https://example.org", farm: nil},
 	}
 	for _, tt := range tests {

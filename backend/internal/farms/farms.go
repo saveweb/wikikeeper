@@ -19,6 +19,7 @@ var domainRules = []domainRule{
 	{farm: models.WikiFarmMiraheze, domains: []string{"miraheze.org"}},
 	{farm: models.WikiFarmShoutWiki, domains: []string{"shoutwiki.com"}},
 	{farm: models.WikiFarmWikiOasis, domains: []string{"wikioasis.org"}},
+	{farm: models.WikiFarmWikiGG, domains: []string{"wiki.gg"}},
 }
 
 // Detect returns the farm hosting rawURL, if its hostname is recognized.

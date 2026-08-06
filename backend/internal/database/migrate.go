@@ -78,6 +78,10 @@ var migrations = []Migration{
 		Version: 14,
 		Name:    "mark_wikioasis_farm",
 	},
+	{
+		Version: 15,
+		Name:    "mark_wikigg_farm",
+	},
 }
 
 // RunMigrations executes all pending migrations

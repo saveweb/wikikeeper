@@ -183,7 +183,8 @@ func TestCollectionStateMigrationPostgres(t *testing.T) {
 		('00000000-0000-0000-0000-000000000003', 'https://example.miraheze.org'),
 		('00000000-0000-0000-0000-000000000004', 'https://example.shoutwiki.com'),
 		('00000000-0000-0000-0000-000000000005', 'https://example.org'),
-		('00000000-0000-0000-0000-000000000006', 'https://example.wikioasis.org')
+		('00000000-0000-0000-0000-000000000006', 'https://example.wikioasis.org'),
+		('00000000-0000-0000-0000-000000000007', 'https://example.wiki.gg')
 	`).Error)
 	up, err = readMigrationFile(13, "up")
 	require.NoError(t, err)
@@ -205,6 +206,12 @@ func TestCollectionStateMigrationPostgres(t *testing.T) {
 	var wikiOasisFarm *string
 	require.NoError(t, db.Raw(`SELECT farm FROM wikis WHERE id = ?`, "00000000-0000-0000-0000-000000000006").Scan(&wikiOasisFarm).Error)
 	require.Equal(t, stringPtr("wikioasis"), wikiOasisFarm)
+	up, err = readMigrationFile(15, "up")
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(up).Error)
+	var wikiGGFarm *string
+	require.NoError(t, db.Raw(`SELECT farm FROM wikis WHERE id = ?`, "00000000-0000-0000-0000-000000000007").Scan(&wikiGGFarm).Error)
+	require.Equal(t, stringPtr("wikigg"), wikiGGFarm)
 	var viewColumns []string
 	require.NoError(t, db.Raw(`
 		SELECT attribute.attname

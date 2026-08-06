@@ -108,3 +108,10 @@ func TestMarkWikiOasisFarmMigrationIsRegistered(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, up, "wikioasis\\.org")
 }
+
+func TestMarkWikiGGFarmMigrationIsRegistered(t *testing.T) {
+	require.Equal(t, "mark_wikigg_farm", getMigrationName(15))
+	up, err := readMigrationFile(15, "up")
+	require.NoError(t, err)
+	require.Contains(t, up, "wiki\\.gg")
+}
