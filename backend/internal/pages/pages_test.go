@@ -407,6 +407,94 @@ func TestWikiDetailRendersErrorsForPublicViewer(t *testing.T) {
 	require.Contains(t, body, `datetime="2026-07-31T04:25:57Z"`)
 	require.Contains(t, body, `&lt;script&gt;alert(&#34;not executable&#34;)&lt;/script&gt;`)
 	require.NotContains(t, body, `<script>alert("not executable")</script>`)
+	require.NotContains(t, body, "Admin Diagnostics")
+	require.NotContains(t, body, "API available")
+}
+
+func TestWikiDetailRendersAdminMetadata(t *testing.T) {
+	wikiID := uuid.New()
+	apiURL := "https://example.org/w/api.php"
+	indexURL := "https://example.org/w/index.php"
+	wikiName := "manual-name"
+	sitename := "Example Wiki"
+	lang := "en"
+	dbType := "mysql"
+	dbVersion := "10.11"
+	mwVersion := "MediaWiki 1.45.1"
+	maxPageID := 12345
+	httpStatus := http.StatusOK
+	responseTime := 217
+	now := time.Date(2026, time.August, 9, 12, 30, 0, 0, time.UTC)
+
+	p := &Pages{
+		cfg:         &config.Config{LogLevel: "INFO"},
+		templateDir: "../../web/templates",
+	}
+	p.baseTemplates = p.parseBaseTemplates()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/wikis/"+wikiID.String(), nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, p.render(c, "wiki_detail.html", M{
+		"IsAdmin": true,
+		"Wiki": &models.Wiki{
+			ID:                  wikiID,
+			URL:                 "https://example.org",
+			APIURL:              &apiURL,
+			IndexURL:            &indexURL,
+			WikiName:            &wikiName,
+			Sitename:            &sitename,
+			Lang:                &lang,
+			DBType:              &dbType,
+			DBVersion:           &dbVersion,
+			MediaWikiVersion:    &mwVersion,
+			MaxPageID:           &maxPageID,
+			Status:              models.WikiStatusOK,
+			CollectionStatus:    models.CollectionStatusOK,
+			HasArchive:          true,
+			APIAvailable:        true,
+			ConsecutiveFailures: 2,
+			CreatedAt:           now.Add(-24 * time.Hour),
+			UpdatedAt:           now,
+			LastCheckAt:         &now,
+			LastSuccessAt:       &now,
+			NextCheckAt:         &now,
+			ArchiveLastCheckAt:  &now,
+			IsActive:            true,
+		},
+		"LatestStats": &models.WikiStats{
+			WikiID:         wikiID,
+			Time:           now,
+			Pages:          500,
+			ActiveUsers:    42,
+			Admins:         7,
+			Jobs:           3,
+			HTTPStatus:     &httpStatus,
+			ResponseTimeMs: &responseTime,
+		},
+	}))
+
+	body := rec.Body.String()
+	require.Equal(t, http.StatusOK, rec.Code)
+	for _, value := range []string{
+		"Admin Diagnostics",
+		wikiID.String(),
+		apiURL,
+		indexURL,
+		"API available",
+		"Failure streak",
+		"Active users",
+		"HTTP status",
+		"Response time",
+		"217 ms",
+	} {
+		require.Contains(t, body, value)
+	}
+	for _, duplicate := range []string{"Manual wiki name", "Wiki status", "Monitoring enabled", "Has archive", "Database version", "Last stats success"} {
+		require.NotContains(t, body, duplicate)
+	}
 }
 
 func TestWikiDetailRendersExtensionSnapshotHistory(t *testing.T) {

@@ -143,6 +143,44 @@
         <span id="action-result" class="text-sm self-center"></span>
     </div>
 
+    {{if .IsAdmin}}
+    <section class="bg-white border border-gray-200 rounded p-4">
+        <h2 class="text-sm font-semibold text-gray-900 mb-3">Admin Diagnostics</h2>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-10 gap-y-5">
+            <div>
+                <h3 class="text-xs font-semibold text-gray-500 uppercase mb-1">Endpoints</h3>
+                <dl class="divide-y divide-gray-100 text-sm">
+                    <div class="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 py-1.5"><dt class="text-gray-500">Wiki ID</dt><dd class="font-mono text-xs text-gray-900 break-all">{{.Wiki.ID}}</dd></div>
+                    <div class="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 py-1.5"><dt class="text-gray-500">API URL</dt><dd class="font-mono text-xs text-gray-900 break-all">{{toa .Wiki.APIURL}}</dd></div>
+                    <div class="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 py-1.5"><dt class="text-gray-500">Index URL</dt><dd class="font-mono text-xs text-gray-900 break-all">{{toa .Wiki.IndexURL}}</dd></div>
+                    <div class="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 py-1.5"><dt class="text-gray-500">Max page ID</dt><dd class="text-gray-900">{{toa .Wiki.MaxPageID}}</dd></div>
+                </dl>
+            </div>
+
+            <div>
+                <h3 class="text-xs font-semibold text-gray-500 uppercase mb-1">Collection</h3>
+                <dl class="divide-y divide-gray-100 text-sm">
+                    <div class="grid grid-cols-[9rem_minmax(0,1fr)] gap-3 py-1.5"><dt class="text-gray-500">Collection status</dt><dd class="text-gray-900">{{.Wiki.CollectionStatus}}</dd></div>
+                    <div class="grid grid-cols-[9rem_minmax(0,1fr)] gap-3 py-1.5"><dt class="text-gray-500">API available</dt><dd class="text-gray-900">{{.Wiki.APIAvailable}}</dd></div>
+                    <div class="grid grid-cols-[9rem_minmax(0,1fr)] gap-3 py-1.5"><dt class="text-gray-500">Failure streak</dt><dd class="text-gray-900">{{.Wiki.ConsecutiveFailures}}</dd></div>
+                </dl>
+
+                {{with .LatestStats}}
+                <h3 class="text-xs font-semibold text-gray-500 uppercase mt-4 mb-1">Latest request</h3>
+                <dl class="divide-y divide-gray-100 text-sm">
+                    <div class="grid grid-cols-[9rem_minmax(0,1fr)] gap-3 py-1.5"><dt class="text-gray-500">Sample time</dt><dd class="font-mono text-xs text-gray-900">{{toa .Time}}</dd></div>
+                    <div class="grid grid-cols-[9rem_minmax(0,1fr)] gap-3 py-1.5"><dt class="text-gray-500">HTTP status</dt><dd class="text-gray-900">{{with .HTTPStatus}}{{.}}{{end}}</dd></div>
+                    <div class="grid grid-cols-[9rem_minmax(0,1fr)] gap-3 py-1.5"><dt class="text-gray-500">Response time</dt><dd class="text-gray-900">{{with .ResponseTimeMs}}{{.}} ms{{end}}</dd></div>
+                    <div class="grid grid-cols-[9rem_minmax(0,1fr)] gap-3 py-1.5"><dt class="text-gray-500">Active users</dt><dd class="text-gray-900">{{.ActiveUsers}}</dd></div>
+                    <div class="grid grid-cols-[9rem_minmax(0,1fr)] gap-3 py-1.5"><dt class="text-gray-500">Admins / jobs</dt><dd class="text-gray-900">{{.Admins}} / {{.Jobs}}</dd></div>
+                </dl>
+                {{end}}
+            </div>
+        </div>
+    </section>
+    {{end}}
+
     {{with .LatestStats}}
     <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div class="bg-white rounded-lg border border-gray-200 p-3 text-center">
