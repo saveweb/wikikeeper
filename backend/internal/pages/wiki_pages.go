@@ -25,6 +25,46 @@ type statsChartPoint struct {
 	Users    int       `json:"users"`
 }
 
+type extensionSnapshotComparison struct {
+	From             *models.WikiExtensionsSnapshot
+	To               *models.WikiExtensionsSnapshot
+	Diff             *services.ExtensionsDiff
+	MediaWikiChanged bool
+}
+
+type extensionHistoryEntry struct {
+	Snapshot   *models.WikiExtensionsSnapshot
+	Comparison *extensionSnapshotComparison
+}
+
+func compareExtensionSnapshots(from, to *models.WikiExtensionsSnapshot) *extensionSnapshotComparison {
+	return &extensionSnapshotComparison{
+		From:             from,
+		To:               to,
+		Diff:             services.CompareExtensionSnapshots(from, to),
+		MediaWikiChanged: stringPointerValue(from.MediaWikiVersion) != stringPointerValue(to.MediaWikiVersion),
+	}
+}
+
+func extensionHistoryEntries(snapshots []*models.WikiExtensionsSnapshot) []extensionHistoryEntry {
+	entries := make([]extensionHistoryEntry, 0, len(snapshots))
+	for i, snapshot := range snapshots {
+		entry := extensionHistoryEntry{Snapshot: snapshot}
+		if i+1 < len(snapshots) {
+			entry.Comparison = compareExtensionSnapshots(snapshots[i+1], snapshot)
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
+func stringPointerValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
 func statsChartPoints(stats []*models.WikiStats) []statsChartPoint {
 	points := make([]statsChartPoint, 0, len(stats))
 	for _, s := range stats {
@@ -194,7 +234,9 @@ func (p *Pages) WikiDetail(c echo.Context) error {
 	}
 	extensionHistory, err := extRepo.GetAllSnapshots(ctx, id)
 	if err == nil && len(extensionHistory) > 1 {
-		data["ExtensionHistory"] = extensionHistory
+		data["ExtensionSnapshots"] = extensionHistory
+		data["ExtensionHistory"] = extensionHistoryEntries(extensionHistory)
+		data["ExtensionComparison"] = compareExtensionSnapshots(extensionHistory[1], extensionHistory[0])
 	}
 
 	archiveRepo := repository.NewArchiveRepository(p.db)
@@ -204,6 +246,43 @@ func (p *Pages) WikiDetail(c echo.Context) error {
 	}
 
 	return p.render(c, "wiki_detail.html", data)
+}
+
+func (p *Pages) WikiExtensionsCompare(c echo.Context) error {
+	wikiID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid wiki ID")
+	}
+	fromID, err := uuid.Parse(c.QueryParam("from"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid from snapshot ID")
+	}
+	toID, err := uuid.Parse(c.QueryParam("to"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid to snapshot ID")
+	}
+
+	repo := repository.NewExtensionsRepository(p.db)
+	ctx := c.Request().Context()
+	from, err := repo.GetSnapshotByID(ctx, wikiID, fromID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return echo.NewHTTPError(http.StatusNotFound, "From snapshot not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	to, err := repo.GetSnapshotByID(ctx, wikiID, toID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return echo.NewHTTPError(http.StatusNotFound, "To snapshot not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+
+	return p.renderPartial(c, "wiki_detail.html", "extension_comparison", M{
+		"ExtensionComparison": compareExtensionSnapshots(from, to),
+		"ExpandComparison":    true,
+	})
 }
 
 func (p *Pages) WikiStatsEmbed(c echo.Context) error {

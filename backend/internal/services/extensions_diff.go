@@ -2,6 +2,8 @@ package services
 
 import (
 	"reflect"
+	"slices"
+	"strings"
 
 	applogger "wikikeeper-backend/internal/logger"
 	"wikikeeper-backend/internal/models"
@@ -19,23 +21,38 @@ type ExtensionsDiff struct {
 
 // ExtensionChange represents a modified extension
 type ExtensionChange struct {
-	Name string
-	Type string
-	Old  *models.WikiExtensionItem
-	New  *models.WikiExtensionItem
+	Name           string
+	Type           string
+	Old            *models.WikiExtensionItem
+	New            *models.WikiExtensionItem
+	VersionChanged bool
+	URLChanged     bool
+	LicenseChanged bool
 }
 
 // CompareExtensions compares old and new extensions data and returns the diff
 func CompareExtensions(old *SiteInfoExtensions, new *SiteInfoExtensions) *ExtensionsDiff {
+	return compareExtensionItems(flattenExtensions(old), flattenExtensions(new))
+}
+
+// CompareExtensionSnapshots compares two stored extension snapshots.
+func CompareExtensionSnapshots(old, new *models.WikiExtensionsSnapshot) *ExtensionsDiff {
+	var oldItems, newItems []models.WikiExtensionItem
+	if old != nil {
+		oldItems = old.Items
+	}
+	if new != nil {
+		newItems = new.Items
+	}
+	return compareExtensionItems(oldItems, newItems)
+}
+
+func compareExtensionItems(oldItems, newItems []models.WikiExtensionItem) *ExtensionsDiff {
 	diff := &ExtensionsDiff{
 		Added:    []models.WikiExtensionItem{},
 		Removed:  []models.WikiExtensionItem{},
 		Modified: []ExtensionChange{},
 	}
-
-	// Flatten extensions and skins into a single list
-	oldItems := flattenExtensions(old)
-	newItems := flattenExtensions(new)
 
 	// Create maps for comparison
 	oldMap := make(map[string]*models.WikiExtensionItem)
@@ -56,10 +73,13 @@ func CompareExtensions(old *SiteInfoExtensions, new *SiteInfoExtensions) *Extens
 			// Extension exists in both, check if modified
 			if !extensionEqual(oldItem, newItem) {
 				diff.Modified = append(diff.Modified, ExtensionChange{
-					Name: newItem.Name,
-					Type: newItem.ExtType,
-					Old:  oldItem,
-					New:  newItem,
+					Name:           newItem.Name,
+					Type:           newItem.ExtType,
+					Old:            oldItem,
+					New:            newItem,
+					VersionChanged: !reflect.DeepEqual(oldItem.Version, newItem.Version),
+					URLChanged:     !reflect.DeepEqual(oldItem.URL, newItem.URL),
+					LicenseChanged: !reflect.DeepEqual(oldItem.LicenseName, newItem.LicenseName),
 				})
 				diff.HasChanges = true
 			}
@@ -78,7 +98,23 @@ func CompareExtensions(old *SiteInfoExtensions, new *SiteInfoExtensions) *Extens
 		}
 	}
 
+	slices.SortFunc(diff.Added, compareExtensionItemsByTypeAndName)
+	slices.SortFunc(diff.Removed, compareExtensionItemsByTypeAndName)
+	slices.SortFunc(diff.Modified, func(a, b ExtensionChange) int {
+		if a.Type != b.Type {
+			return strings.Compare(a.Type, b.Type)
+		}
+		return strings.Compare(a.Name, b.Name)
+	})
+
 	return diff
+}
+
+func compareExtensionItemsByTypeAndName(a, b models.WikiExtensionItem) int {
+	if a.ExtType != b.ExtType {
+		return strings.Compare(a.ExtType, b.ExtType)
+	}
+	return strings.Compare(a.Name, b.Name)
 }
 
 // flattenExtensions converts SiteInfoExtensions to a WikiExtensionItem list

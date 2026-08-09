@@ -125,6 +125,20 @@ func (r *ExtensionsRepository) GetAllSnapshots(ctx context.Context, wikiID uuid.
 	return snapshots, nil
 }
 
+// GetSnapshotByID gets one snapshot belonging to a wiki, including its items.
+func (r *ExtensionsRepository) GetSnapshotByID(ctx context.Context, wikiID, snapshotID uuid.UUID) (*models.WikiExtensionsSnapshot, error) {
+	var snapshot models.WikiExtensionsSnapshot
+	if err := r.db.WithContext(ctx).
+		Where("wiki_id = ? AND id = ?", wikiID, snapshotID).
+		First(&snapshot).Error; err != nil {
+		return nil, err
+	}
+	if err := r.loadSnapshotItems(ctx, []*models.WikiExtensionsSnapshot{&snapshot}); err != nil {
+		return nil, err
+	}
+	return &snapshot, nil
+}
+
 type canonicalExtensionItem struct {
 	ExtType     string  `json:"type"`
 	Name        string  `json:"name"`

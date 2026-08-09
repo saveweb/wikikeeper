@@ -113,6 +113,7 @@ func main() {
 	e.GET("/wikis/add", pagesHandler.WikiAdd)
 	e.POST("/wikis", pagesHandler.WikiAddSubmit)
 	e.GET("/wikis/:id", pagesHandler.WikiDetail)
+	e.GET("/wikis/:id/extensions/compare", pagesHandler.WikiExtensionsCompare)
 	e.GET("/wikis/:id/stats/embed", pagesHandler.WikiStatsEmbed)
 	e.POST("/wikis/:id/check", pagesHandler.TriggerCheck)
 	e.POST("/wikis/:id/check-archive", pagesHandler.TriggerArchiveCheck)

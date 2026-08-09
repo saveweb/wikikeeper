@@ -237,17 +237,24 @@
         </div>
     </dialog>
     {{end}} {{with .Extensions}}
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div class="flex items-center justify-between mb-3">
-            <h2 class="text-sm font-semibold text-gray-700">
-                Extensions ({{len .Items}})
-            </h2>
-            <div class="text-right text-xs text-gray-400">
-                <div>Snapshot {{formatDate .SnapshotAt}}</div>
-                {{if .MediaWikiVersion}}<div>{{.MediaWikiVersion}}</div>{{end}}
-            </div>
-        </div>
-        <div class="flex flex-wrap gap-1.5">
+    <details
+        id="current-extensions"
+        class="group bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
+        {{if le (len .Items) 30}}open{{end}}
+    >
+        <summary class="flex cursor-pointer list-none items-center gap-2 px-4 py-3 [&::-webkit-details-marker]:hidden">
+            <span aria-hidden="true" class="w-3 shrink-0 text-xs text-gray-400 transition-transform group-open:rotate-90">&#9656;</span>
+            <span class="flex min-w-0 flex-1 items-center justify-between gap-4">
+                <span class="shrink-0 whitespace-nowrap text-sm font-semibold text-gray-700">
+                    Extensions ({{len .Items}})
+                </span>
+                <span class="min-w-0 text-right text-xs text-gray-400">
+                    <span class="block"><span class="hidden sm:inline">Snapshot </span>{{formatDate .SnapshotAt}}</span>
+                    {{if .MediaWikiVersion}}<span class="block">{{.MediaWikiVersion}}</span>{{end}}
+                </span>
+            </span>
+        </summary>
+        <div class="flex flex-wrap gap-1.5 border-t border-gray-100 px-4 py-3">
             {{range .Items}}
             <a
                 href="/extensions/{{.Name}}"
@@ -259,15 +266,43 @@
             </a>
             {{end}}
         </div>
-    </div>
+    </details>
     {{end}} {{with .ExtensionHistory}}
     <div
         class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
     >
-        <div class="px-4 py-3 border-b border-gray-200">
+        <div class="px-4 py-3 border-b border-gray-200 flex flex-col gap-3">
             <h2 class="text-sm font-semibold text-gray-700">
                 Extensions History
             </h2>
+            <form
+                class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end"
+                hx-get="/wikis/{{$.Wiki.ID}}/extensions/compare"
+                hx-target="#extension-comparison-result"
+                hx-indicator="#extension-comparison-indicator"
+            >
+                <label class="block min-w-0">
+                    <span class="mb-1 block text-xs font-medium text-gray-600">From</span>
+                    <select name="from" required class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-800">
+                        {{range $.ExtensionSnapshots}}
+                        <option value="{{.ID}}" {{if eq .ID $.ExtensionComparison.From.ID}}selected{{end}}>{{formatDate .SnapshotAt}}</option>
+                        {{end}}
+                    </select>
+                </label>
+                <label class="block min-w-0">
+                    <span class="mb-1 block text-xs font-medium text-gray-600">To</span>
+                    <select name="to" required class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-800">
+                        {{range $.ExtensionSnapshots}}
+                        <option value="{{.ID}}" {{if eq .ID $.ExtensionComparison.To.ID}}selected{{end}}>{{formatDate .SnapshotAt}}</option>
+                        {{end}}
+                    </select>
+                </label>
+                <button type="submit" class="h-9 rounded bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700">Compare</button>
+            </form>
+            <span id="extension-comparison-indicator" class="htmx-indicator text-xs text-gray-500">Comparing...</span>
+            <div id="extension-comparison-result">
+                {{template "extension_comparison" $}}
+            </div>
         </div>
         <div class="divide-y divide-gray-200">
             {{range .}}
@@ -277,24 +312,32 @@
                 >
                     <div class="min-w-0">
                         <span class="text-sm font-medium text-gray-900"
-                            >{{formatDate .SnapshotAt}}</span
+                            >{{formatDate .Snapshot.SnapshotAt}}</span
                         >
-                        {{if .ValidUntil}}<span
+                        {{if .Snapshot.ValidUntil}}<span
                             class="ml-2 text-xs text-gray-500"
-                            >Until {{formatDate .ValidUntil}}</span
+                            >Until {{formatDate .Snapshot.ValidUntil}}</span
                         >{{else}}<span class="ml-2 text-xs text-green-700"
                             >Current</span
                         >{{end}}
                     </div>
                     <div class="shrink-0 text-right text-xs text-gray-500">
-                        <div>{{len .Items}} extensions</div>
-                        {{if .MediaWikiVersion}}<div>
-                            {{.MediaWikiVersion}}
+                        <div>
+                            {{len .Snapshot.Items}} extensions and skins
+                            {{with .Comparison}}
+                            <span class="ml-2 text-green-700">+{{len .Diff.Added}}</span>
+                            <span class="ml-1 text-red-700">-{{len .Diff.Removed}}</span>
+                            <span class="ml-1 text-amber-700">~{{len .Diff.Modified}}</span>
+                            {{end}}
+                        </div>
+                        {{if .Snapshot.MediaWikiVersion}}<div>
+                            {{.Snapshot.MediaWikiVersion}}
+                            {{with .Comparison}}{{if .MediaWikiChanged}}<span class="ml-1 text-gray-400">changed</span>{{end}}{{end}}
                         </div>{{end}}
                     </div>
                 </summary>
                 <div class="mt-3 flex flex-wrap gap-1.5">
-                    {{range .Items}}
+                    {{range .Snapshot.Items}}
                     <span
                         class="inline-flex items-center px-2 py-1 rounded text-xs bg-gray-100 text-gray-700"
                     >
@@ -433,3 +476,72 @@
     })();
 </script>
 {{end}} {{end}}
+
+{{define "extension_comparison"}}
+{{$comparison := .ExtensionComparison}}
+<details class="group border-t border-gray-200 pt-3" {{if .ExpandComparison}}open{{end}}>
+    <summary class="flex cursor-pointer list-none flex-wrap items-start justify-between gap-2">
+        <div>
+            <div class="text-xs font-medium text-gray-700">{{formatDate $comparison.From.SnapshotAt}} to {{formatDate $comparison.To.SnapshotAt}}</div>
+            <div class="mt-0.5 text-xs text-gray-500">
+                <span class="text-green-700">+{{len $comparison.Diff.Added}} added</span>
+                <span class="ml-2 text-red-700">-{{len $comparison.Diff.Removed}} removed</span>
+                <span class="ml-2 text-amber-700">~{{len $comparison.Diff.Modified}} updated</span>
+            </div>
+        </div>
+        {{if $comparison.MediaWikiChanged}}
+        <div class="text-xs text-gray-600">
+            MediaWiki:
+            {{if $comparison.From.MediaWikiVersion}}{{$comparison.From.MediaWikiVersion}}{{else}}unknown{{end}}
+            &rarr;
+            {{if $comparison.To.MediaWikiVersion}}{{$comparison.To.MediaWikiVersion}}{{else}}unknown{{end}}
+        </div>
+        {{end}}
+    </summary>
+    <div class="mt-3">{{template "extension_comparison_body" $comparison}}</div>
+</details>
+{{end}}
+
+{{define "extension_comparison_body"}}
+{{if and (not .Diff.HasChanges) (not .MediaWikiChanged)}}
+<p class="text-xs text-gray-500">No changes.</p>
+{{else}}
+<div class="space-y-3 text-xs">
+    {{with .Diff.Added}}
+    <div>
+        <div class="mb-1 font-medium text-green-700">Added</div>
+        <div class="flex flex-wrap gap-1.5">
+            {{range .}}<span class="rounded bg-green-50 px-2 py-1 text-green-800">+ {{.Name}}{{if .Version}} <span class="text-green-600">{{truncate (toa .Version) 18}}</span>{{end}}</span>{{end}}
+        </div>
+    </div>
+    {{end}}
+    {{with .Diff.Removed}}
+    <div>
+        <div class="mb-1 font-medium text-red-700">Removed</div>
+        <div class="flex flex-wrap gap-1.5">
+            {{range .}}<span class="rounded bg-red-50 px-2 py-1 text-red-800">- {{.Name}}{{if .Version}} <span class="text-red-600">{{truncate (toa .Version) 18}}</span>{{end}}</span>{{end}}
+        </div>
+    </div>
+    {{end}}
+    {{with .Diff.Modified}}
+    <div>
+        <div class="mb-1 font-medium text-amber-700">Updated</div>
+        <div class="divide-y divide-gray-200 rounded border border-gray-200 bg-white">
+            {{range .}}
+            <div class="grid gap-1 px-2 py-1.5 sm:grid-cols-[minmax(8rem,0.7fr)_minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
+                <span class="font-medium text-gray-800">{{.Name}}</span>
+                {{if .VersionChanged}}
+                <span class="min-w-0 break-all text-gray-500">{{if .Old.Version}}{{.Old.Version}}{{else}}version unknown{{end}}</span>
+                <span class="text-gray-400">&rarr;</span>
+                <span class="min-w-0 break-all text-gray-700">{{if .New.Version}}{{.New.Version}}{{else}}version unknown{{end}}</span>
+                {{end}}
+                {{if .LicenseChanged}}<span class="sm:col-start-2 sm:col-span-3 text-gray-500">License: {{if .Old.LicenseName}}{{.Old.LicenseName}}{{else}}unknown{{end}} &rarr; {{if .New.LicenseName}}{{.New.LicenseName}}{{else}}unknown{{end}}</span>{{end}}
+                {{if .URLChanged}}<span class="break-all sm:col-start-2 sm:col-span-3 text-gray-500">URL: {{if .Old.URL}}{{.Old.URL}}{{else}}unknown{{end}} &rarr; {{if .New.URL}}{{.New.URL}}{{else}}unknown{{end}}</span>{{end}}
+            </div>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+</div>
+{{end}}
+{{end}}

@@ -192,6 +192,24 @@ func TestCreateSnapshotReusesContentAddressedSet(t *testing.T) {
 	require.Equal(t, "ParserFunctions", got.Items[0].Name)
 }
 
+func TestGetSnapshotByIDIsScopedToWiki(t *testing.T) {
+	repo, wikiID := setupExtensionsTestDB(t)
+	ctx := context.Background()
+	snapshot := &models.WikiExtensionsSnapshot{
+		ID: uuid.New(), WikiID: wikiID, SnapshotAt: time.Now().UTC(),
+		Items: []models.WikiExtensionItem{{ExtType: "extension", Name: "Cite"}},
+	}
+	require.NoError(t, repo.CreateSnapshot(ctx, snapshot))
+
+	got, err := repo.GetSnapshotByID(ctx, wikiID, snapshot.ID)
+	require.NoError(t, err)
+	require.Equal(t, snapshot.ID, got.ID)
+	require.Len(t, got.Items, 1)
+
+	_, err = repo.GetSnapshotByID(ctx, uuid.New(), snapshot.ID)
+	require.Error(t, err)
+}
+
 func TestBackfillExtensionSetsIsResumable(t *testing.T) {
 	repo, wikiID := setupExtensionsTestDB(t)
 	ctx := context.Background()

@@ -2,6 +2,7 @@ package pages
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -419,19 +420,56 @@ func TestWikiDetailRendersExtensionSnapshotHistory(t *testing.T) {
 	c := e.NewContext(req, rec)
 
 	require.NoError(t, p.render(c, "wiki_detail.html", M{
-		"Wiki":             &models.Wiki{ID: uuid.New(), URL: "https://example.org", Status: models.WikiStatusOK},
-		"Extensions":       current,
-		"ExtensionHistory": []*models.WikiExtensionsSnapshot{current, old},
+		"Wiki":                &models.Wiki{ID: uuid.New(), URL: "https://example.org", Status: models.WikiStatusOK},
+		"Extensions":          current,
+		"ExtensionSnapshots":  []*models.WikiExtensionsSnapshot{current, old},
+		"ExtensionHistory":    extensionHistoryEntries([]*models.WikiExtensionsSnapshot{current, old}),
+		"ExtensionComparison": compareExtensionSnapshots(old, current),
 	}))
 
 	body := rec.Body.String()
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, body, "Extensions History")
-	require.Contains(t, body, "Snapshot 2026-07-31 12:00 UTC")
+	require.Contains(t, body, `hidden sm:inline">Snapshot </span>2026-07-31 12:00 UTC`)
 	require.Contains(t, body, "MediaWiki 1.46.0")
 	require.Contains(t, body, "MediaWiki 1.45.1")
 	require.Contains(t, body, "Current")
 	require.Contains(t, body, "Until 2026-07-31 12:00 UTC")
 	require.Contains(t, body, "VisualEditor")
 	require.Contains(t, body, "WikiEditor")
+	require.Contains(t, body, `name="from"`)
+	require.Contains(t, body, `name="to"`)
+	require.Contains(t, body, "+1 added")
+	require.Contains(t, body, "-1 removed")
+	require.Contains(t, body, "MediaWiki:")
+	require.Regexp(t, `<details[^>]*id="current-extensions"[^>]*open`, body)
+}
+
+func TestWikiDetailCollapsesLargeCurrentExtensionList(t *testing.T) {
+	items := make([]models.WikiExtensionItem, 31)
+	for i := range items {
+		items[i].Name = fmt.Sprintf("Extension%d", i)
+	}
+
+	p := &Pages{
+		cfg:         &config.Config{LogLevel: "INFO"},
+		templateDir: "../../web/templates",
+	}
+	p.baseTemplates = p.parseBaseTemplates()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/wikis/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	require.NoError(t, p.render(c, "wiki_detail.html", M{
+		"Wiki": &models.Wiki{ID: uuid.New(), URL: "https://example.org", Status: models.WikiStatusOK},
+		"Extensions": &models.WikiExtensionsSnapshot{
+			SnapshotAt: time.Now().UTC(),
+			Items:      items,
+		},
+	}))
+
+	body := rec.Body.String()
+	require.Contains(t, body, "Extensions (31)")
+	require.NotRegexp(t, `<details[^>]*id="current-extensions"[^>]*open`, body)
 }
