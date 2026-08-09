@@ -324,6 +324,31 @@ func TestWikiDetailRendersStatsChartSeriesSelector(t *testing.T) {
 	require.Contains(t, body, `id="stats-chart-data"`)
 }
 
+func TestWikiDetailRendersRedirectsContentLabel(t *testing.T) {
+	p := &Pages{
+		cfg:         &config.Config{LogLevel: "INFO"},
+		templateDir: "../../web/templates",
+	}
+	p.baseTemplates = p.parseBaseTemplates()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/wikis/test", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, p.render(c, "wiki_detail.html", M{
+		"Wiki": &models.Wiki{ID: uuid.New(), URL: "https://example.org", Status: models.WikiStatusOK},
+		"Archives": []*models.WikiArchive{{
+			IAIdentifier:     "wiki-example-20260809",
+			HasRedirectsList: true,
+		}},
+	}))
+
+	body := rec.Body.String()
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, body, ">redirects</span")
+}
+
 func TestStatsEmbedRendersStandaloneChart(t *testing.T) {
 	wikiID := uuid.New()
 	p := &Pages{

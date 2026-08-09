@@ -52,6 +52,7 @@ type ArchiveInfo struct {
 	HasImagesDump     bool       `json:"has_images_dump"`
 	HasTitlesList     bool       `json:"has_titles_list"`
 	HasImagesList     bool       `json:"has_images_list"`
+	HasRedirectsList  bool       `json:"has_redirects_list"`
 	HasLegacyWikidump bool       `json:"has_legacy_wikidump"`
 }
 
@@ -192,6 +193,7 @@ func (s *ArchiveService) CollectArchives(ctx context.Context, db *gorm.DB, wikiI
 			HasImagesDump:     archiveInfo.HasImagesDump,
 			HasTitlesList:     archiveInfo.HasTitlesList,
 			HasImagesList:     archiveInfo.HasImagesList,
+			HasRedirectsList:  archiveInfo.HasRedirectsList,
 			HasLegacyWikidump: archiveInfo.HasLegacyWikidump,
 		}
 
@@ -496,6 +498,8 @@ func (s *ArchiveService) checkFileContents(info *ArchiveInfo, files []struct {
 			info.HasTitlesList = true
 		case strings.Contains(name, "-images.txt") || strings.Contains(name, "-images.xml"):
 			info.HasImagesList = true
+		case strings.HasSuffix(name, "-redirects.jsonl.zst"):
+			info.HasRedirectsList = true
 		case strings.Contains(name, "-wikidump.7z") || strings.Contains(name, "-wikidump.tar"):
 			info.HasLegacyWikidump = true
 		}

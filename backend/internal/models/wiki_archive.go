@@ -27,6 +27,7 @@ type WikiArchive struct {
 	HasImagesDump     bool `gorm:"not null;default:false" json:"has_images_dump"`
 	HasTitlesList     bool `gorm:"not null;default:false" json:"has_titles_list"`
 	HasImagesList     bool `gorm:"not null;default:false" json:"has_images_list"`
+	HasRedirectsList  bool `gorm:"not null;default:false" json:"has_redirects_list"`
 	HasLegacyWikidump bool `gorm:"not null;default:false" json:"has_legacy_wikidump"`
 
 	// Timestamps

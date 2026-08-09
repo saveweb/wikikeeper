@@ -86,6 +86,10 @@ var migrations = []Migration{
 		Version: 16,
 		Name:    "remove_offline_status",
 	},
+	{
+		Version: 17,
+		Name:    "add_archive_redirects_list",
+	},
 }
 
 // RunMigrations executes all pending migrations

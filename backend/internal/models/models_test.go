@@ -182,6 +182,7 @@ func TestWikiArchiveJSONSerialization(t *testing.T) {
 		HasImagesDump:     false,
 		HasTitlesList:     true,
 		HasImagesList:     false,
+		HasRedirectsList:  true,
 		HasLegacyWikidump: false,
 	}
 
@@ -207,6 +208,10 @@ func TestWikiArchiveJSONSerialization(t *testing.T) {
 
 	if result["has_xml_current"] != true {
 		t.Errorf("Expected has_xml_current true, got %v", result["has_xml_current"])
+	}
+
+	if result["has_redirects_list"] != true {
+		t.Errorf("Expected has_redirects_list true, got %v", result["has_redirects_list"])
 	}
 
 	if result["item_size"] != float64(itemSize) {

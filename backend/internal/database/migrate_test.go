@@ -127,6 +127,18 @@ func TestRemoveOfflineStatusMigrationIsRegistered(t *testing.T) {
 	require.Contains(t, down, "'offline'")
 }
 
+func TestAddArchiveRedirectsListMigrationIsRegistered(t *testing.T) {
+	require.Equal(t, "add_archive_redirects_list", getMigrationName(17))
+
+	up, err := readMigrationFile(17, "up")
+	require.NoError(t, err)
+	require.Contains(t, up, "has_redirects_list BOOLEAN NOT NULL DEFAULT false")
+
+	down, err := readMigrationFile(17, "down")
+	require.NoError(t, err)
+	require.Contains(t, down, "DROP COLUMN IF EXISTS has_redirects_list")
+}
+
 func TestMarkWikiGGFarmMigrationIsRegistered(t *testing.T) {
 	require.Equal(t, "mark_wikigg_farm", getMigrationName(15))
 	up, err := readMigrationFile(15, "up")

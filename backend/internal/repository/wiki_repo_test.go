@@ -87,6 +87,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 			has_images_dump INTEGER NOT NULL DEFAULT 0,
 			has_titles_list INTEGER NOT NULL DEFAULT 0,
 			has_images_list INTEGER NOT NULL DEFAULT 0,
+			has_redirects_list INTEGER NOT NULL DEFAULT 0,
 			has_legacy_wikidump INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

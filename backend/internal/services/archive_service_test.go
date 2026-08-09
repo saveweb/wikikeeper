@@ -38,6 +38,30 @@ func TestScrapeSearchResultOriginalURL(t *testing.T) {
 	require.Nil(t, result.Items[3].OriginalURL)
 }
 
+func TestCheckFileContentsDetectsRedirectsList(t *testing.T) {
+	var metadata archiveMetadata
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"files": [{"name": "osm.bio-20260809-redirects.jsonl.zst"}]
+	}`), &metadata))
+
+	info := &ArchiveInfo{}
+	NewArchiveService(time.Second, "WikiKeeper-Test/1.0").checkFileContents(info, metadata.Files)
+
+	require.True(t, info.HasRedirectsList)
+}
+
+func TestCheckFileContentsIgnoresRedirectsChecksum(t *testing.T) {
+	var metadata archiveMetadata
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"files": [{"name": "osm.bio-20260809-redirects.jsonl.zst.sha1"}]
+	}`), &metadata))
+
+	info := &ArchiveInfo{}
+	NewArchiveService(time.Second, "WikiKeeper-Test/1.0").checkFileContents(info, metadata.Files)
+
+	require.False(t, info.HasRedirectsList)
+}
+
 func TestCollectArchivesRecordsFailure(t *testing.T) {
 	db := setupCollectorTestDB(t)
 	ctx := context.Background()
