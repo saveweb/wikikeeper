@@ -19,6 +19,7 @@ import (
 	"gorm.io/gorm"
 
 	"wikikeeper-backend/internal/config"
+	"wikikeeper-backend/internal/repository"
 	"wikikeeper-backend/internal/services"
 )
 
@@ -146,6 +147,7 @@ func funcMap() template.FuncMap {
 		"formatNumber": formatNumber,
 		"formatBytes":  formatBytes,
 		"relTime":      relTime,
+		"archiveAges":  archiveAges,
 		"truncate":     truncate,
 		"sub":          func(a, b int) int { return a - b },
 		"add":          func(a, b int) int { return a + b },
@@ -159,6 +161,33 @@ func funcMap() template.FuncMap {
 		"tolower":      strings.ToLower,
 		"queryStr":     queryStr,
 	}
+}
+
+func archiveAges(dates repository.ArchiveDumpDates) string {
+	return archiveAgesAt(dates, time.Now().UTC())
+}
+
+func archiveAgesAt(dates repository.ArchiveDumpDates, now time.Time) string {
+	ages := make([]string, 0, 2)
+	if dates.LatestXMLDumpAt != nil {
+		ages = append(ages, "xml "+dumpAgeAt(*dates.LatestXMLDumpAt, now))
+	}
+	if dates.LatestImagesDumpAt != nil {
+		ages = append(ages, "images "+dumpAgeAt(*dates.LatestImagesDumpAt, now))
+	}
+	return strings.Join(ages, ", ")
+}
+
+func dumpAgeAt(dumpDate, now time.Time) string {
+	days := int(now.Sub(dumpDate).Hours() / 24)
+	if days < 0 {
+		days = 0
+	}
+	if days < 365 {
+		return fmt.Sprintf("%dd+ ago", days)
+	}
+	years := math.Floor(float64(days)/365*10) / 10
+	return fmt.Sprintf("%.1fy+ ago", years)
 }
 
 func formatDate(v any) string {

@@ -106,6 +106,9 @@
                 <td class="px-4 py-3">
                     {{if .HasArchive}}
                     <span class="text-green-600 text-sm font-medium">Yes</span>
+                    {{with archiveAges (index $.ArchiveDumpDates .ID)}}
+                    <div class="mt-1 text-xs text-gray-500">({{.}})</div>
+                    {{end}}
                     {{else}}
                     <span class="text-gray-400 text-sm">No</span>
                     {{end}}

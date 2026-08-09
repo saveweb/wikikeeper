@@ -123,8 +123,28 @@ func TestTimeFormattingAlwaysUsesUTC(t *testing.T) {
 	require.Equal(t, "2026-07-31T12:25:57Z", toa(&value))
 }
 
+func TestArchiveAges(t *testing.T) {
+	now := time.Date(2026, time.August, 9, 0, 0, 0, 0, time.UTC)
+	xml := now.Add(-438 * 24 * time.Hour)
+	images := now.Add(-28 * 24 * time.Hour)
+
+	require.Equal(t, "xml 1.2y+ ago, images 28d+ ago", archiveAgesAt(repository.ArchiveDumpDates{
+		LatestXMLDumpAt:    &xml,
+		LatestImagesDumpAt: &images,
+	}, now))
+	require.Equal(t, "images 0d+ ago", archiveAgesAt(repository.ArchiveDumpDates{
+		LatestImagesDumpAt: ptrTime(now.Add(24 * time.Hour)),
+	}, now))
+	require.Empty(t, archiveAgesAt(repository.ArchiveDumpDates{}, now))
+}
+
+func ptrTime(value time.Time) *time.Time {
+	return &value
+}
+
 func TestDashboardMissingWikiNameUsesLinkedHostname(t *testing.T) {
 	wikiID := uuid.New()
+	xmlDump := time.Now().UTC().Add(-28 * 24 * time.Hour)
 	p := &Pages{
 		cfg:         &config.Config{LogLevel: "INFO"},
 		templateDir: "../../web/templates",
@@ -138,11 +158,15 @@ func TestDashboardMissingWikiNameUsesLinkedHostname(t *testing.T) {
 
 	require.NoError(t, p.render(c, "dashboard.html", M{
 		"RecentWikis": []*models.Wiki{{
-			ID:        wikiID,
-			URL:       "https://alacity.miraheze.org/w/",
-			Status:    models.WikiStatusError,
-			UpdatedAt: time.Now(),
+			ID:         wikiID,
+			URL:        "https://alacity.miraheze.org/w/",
+			Status:     models.WikiStatusError,
+			HasArchive: true,
+			UpdatedAt:  time.Now(),
 		}},
+		"ArchiveDumpDates": map[uuid.UUID]repository.ArchiveDumpDates{
+			wikiID: {LatestXMLDumpAt: &xmlDump},
+		},
 	}))
 
 	body := rec.Body.String()
@@ -150,6 +174,7 @@ func TestDashboardMissingWikiNameUsesLinkedHostname(t *testing.T) {
 	require.Contains(t, body, `href="/wikis/`+wikiID.String()+`"`)
 	require.Contains(t, body, ">alacity.miraheze.org</span>")
 	require.Contains(t, body, `src="/api/wikis/`+wikiID.String()+`/thumbnail"`)
+	require.Contains(t, body, "(xml 28d&#43; ago)")
 }
 
 func TestDashboardFormatsArchivedSize(t *testing.T) {
@@ -197,6 +222,33 @@ func TestWikiListRendersThumbnail(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), `src="/api/wikis/`+wikiID.String()+`/thumbnail"`)
+}
+
+func TestWikiListRendersArchiveAges(t *testing.T) {
+	wikiID := uuid.New()
+	now := time.Now().UTC()
+	xml := now.Add(-438 * 24 * time.Hour)
+	images := now.Add(-28 * 24 * time.Hour)
+	p := &Pages{cfg: &config.Config{LogLevel: "INFO"}, templateDir: "../../web/templates"}
+	p.baseTemplates = p.parseBaseTemplates()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/wikis", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, p.renderPartial(c, "wiki_list.html", "wiki_list_content", M{
+		"Wikis": []*models.Wiki{{
+			ID: wikiID, URL: "https://example.org", Status: models.WikiStatusOK, HasArchive: true,
+		}},
+		"ArchiveDumpDates": map[uuid.UUID]repository.ArchiveDumpDates{
+			wikiID: {LatestXMLDumpAt: &xml, LatestImagesDumpAt: &images},
+		},
+		"Total": int64(1), "Page": 1, "PageSize": 20, "Pages": 1, "BaseURL": "/wikis",
+	}))
+
+	body := rec.Body.String()
+	require.Contains(t, body, "(xml 1.2y&#43; ago, images 28d&#43; ago)")
 }
 
 func TestWikiListRendersDisabledMonitoringState(t *testing.T) {

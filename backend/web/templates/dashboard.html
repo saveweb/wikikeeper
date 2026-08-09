@@ -88,7 +88,12 @@
                             </span>
                         </td>
                         <td class="px-4 py-3">
-                            {{if .HasArchive}}<span class="text-green-600 text-sm">Yes</span>{{else}}<span class="text-gray-400 text-sm">No</span>{{end}}
+                            {{if .HasArchive}}
+                            <span class="text-green-600 text-sm">Yes</span>
+                            {{with archiveAges (index $.ArchiveDumpDates .ID)}}
+                            <div class="mt-1 text-xs text-gray-500">({{.}})</div>
+                            {{end}}
+                            {{else}}<span class="text-gray-400 text-sm">No</span>{{end}}
                         </td>
                         <td class="px-4 py-3 text-sm text-gray-500">{{toa .UpdatedAt}}</td>
                     </tr>

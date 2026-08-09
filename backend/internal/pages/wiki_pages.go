@@ -83,6 +83,17 @@ func statsChartPoints(stats []*models.WikiStats) []statsChartPoint {
 	return points
 }
 
+func (p *Pages) getArchiveDumpDates(
+	ctx context.Context,
+	wikis []*models.Wiki,
+) (map[uuid.UUID]repository.ArchiveDumpDates, error) {
+	wikiIDs := make([]uuid.UUID, 0, len(wikis))
+	for _, wiki := range wikis {
+		wikiIDs = append(wikiIDs, wiki.ID)
+	}
+	return repository.NewArchiveRepository(p.db).GetLatestDumpDatesByWikiIDs(ctx, wikiIDs)
+}
+
 func (p *Pages) WikiList(c echo.Context) error {
 	data := p.baseData(c, "Wikis")
 	ctx := c.Request().Context()
@@ -133,8 +144,13 @@ func (p *Pages) WikiList(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
+	archiveDumpDates, err := p.getArchiveDumpDates(ctx, wikis)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
 
 	data["Wikis"] = wikis
+	data["ArchiveDumpDates"] = archiveDumpDates
 	data["Total"] = total
 	data["Page"] = page
 	data["PageSize"] = pageSize

@@ -41,3 +41,44 @@ func TestGetLatestArchiveByWikiIDUsesDumpDate(t *testing.T) {
 	_, err = repo.GetLatestByWikiID(ctx, uuid.New())
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
+
+func TestGetLatestDumpDatesByWikiIDs(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewArchiveRepository(db)
+	ctx := context.Background()
+	wikiID := uuid.New()
+	otherWikiID := uuid.New()
+	for id, rawURL := range map[uuid.UUID]string{
+		wikiID:      "https://example.org",
+		otherWikiID: "https://other.example.org",
+	} {
+		require.NoError(t, db.Create(&models.Wiki{
+			ID: id, URL: rawURL, Status: models.WikiStatusOK,
+		}).Error)
+	}
+
+	oldXML := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
+	latestXML := time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)
+	latestImages := time.Date(2025, time.February, 1, 0, 0, 0, 0, time.UTC)
+	newerWithoutContent := time.Date(2025, time.March, 1, 0, 0, 0, 0, time.UTC)
+	archives := []*models.WikiArchive{
+		{ID: uuid.New(), WikiID: wikiID, IAIdentifier: "old-xml", DumpDate: &oldXML, HasXMLCurrent: true},
+		{ID: uuid.New(), WikiID: wikiID, IAIdentifier: "latest-xml", DumpDate: &latestXML, HasXMLHistory: true},
+		{ID: uuid.New(), WikiID: wikiID, IAIdentifier: "latest-images", DumpDate: &latestImages, HasImagesDump: true},
+		{ID: uuid.New(), WikiID: wikiID, IAIdentifier: "newer-without-content", DumpDate: &newerWithoutContent},
+		{ID: uuid.New(), WikiID: otherWikiID, IAIdentifier: "other-wiki", DumpDate: &newerWithoutContent, HasImagesDump: true},
+	}
+	for _, archive := range archives {
+		require.NoError(t, repo.Create(ctx, archive))
+	}
+
+	dates, err := repo.GetLatestDumpDatesByWikiIDs(ctx, []uuid.UUID{wikiID})
+	require.NoError(t, err)
+	require.Len(t, dates, 1)
+	require.Equal(t, latestXML, *dates[wikiID].LatestXMLDumpAt)
+	require.Equal(t, latestImages, *dates[wikiID].LatestImagesDumpAt)
+
+	empty, err := repo.GetLatestDumpDatesByWikiIDs(ctx, nil)
+	require.NoError(t, err)
+	require.Empty(t, empty)
+}

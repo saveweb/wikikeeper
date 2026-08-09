@@ -32,6 +32,8 @@ func (p *Pages) Dashboard(c echo.Context) error {
 	})
 	if err == nil {
 		data["RecentWikis"] = wikis
+		archiveDumpDates, _ := p.getArchiveDumpDates(ctx, wikis)
+		data["ArchiveDumpDates"] = archiveDumpDates
 	}
 
 	return p.render(c, "dashboard.html", data)

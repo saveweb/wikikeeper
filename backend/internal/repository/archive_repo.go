@@ -2,11 +2,19 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"wikikeeper-backend/internal/models"
 )
+
+// ArchiveDumpDates contains the newest known dump date for each content type.
+type ArchiveDumpDates struct {
+	WikiID             uuid.UUID  `gorm:"column:wiki_id"`
+	LatestXMLDumpAt    *time.Time `gorm:"column:latest_xml_dump_at"`
+	LatestImagesDumpAt *time.Time `gorm:"column:latest_images_dump_at"`
+}
 
 // ArchiveRepository handles wiki_archives database operations
 type ArchiveRepository struct {
@@ -67,6 +75,49 @@ func (r *ArchiveRepository) GetLatestByWikiID(ctx context.Context, wikiID uuid.U
 		return nil, err
 	}
 	return &archive, nil
+}
+
+// GetLatestDumpDatesByWikiIDs returns content-specific dump dates for a page of wikis.
+func (r *ArchiveRepository) GetLatestDumpDatesByWikiIDs(
+	ctx context.Context,
+	wikiIDs []uuid.UUID,
+) (map[uuid.UUID]ArchiveDumpDates, error) {
+	result := make(map[uuid.UUID]ArchiveDumpDates, len(wikiIDs))
+	if len(wikiIDs) == 0 {
+		return result, nil
+	}
+
+	var archives []models.WikiArchive
+	err := r.db.WithContext(ctx).
+		Model(&models.WikiArchive{}).
+		Select("wiki_id", "dump_date", "has_xml_current", "has_xml_history", "has_images_dump").
+		Where("wiki_id IN ?", wikiIDs).
+		Find(&archives).Error
+	if err != nil {
+		return nil, err
+	}
+
+	for _, archive := range archives {
+		if archive.DumpDate == nil {
+			continue
+		}
+		dates := result[archive.WikiID]
+		dates.WikiID = archive.WikiID
+		if archive.HasXMLCurrent || archive.HasXMLHistory {
+			if dates.LatestXMLDumpAt == nil || archive.DumpDate.After(*dates.LatestXMLDumpAt) {
+				dumpDate := *archive.DumpDate
+				dates.LatestXMLDumpAt = &dumpDate
+			}
+		}
+		if archive.HasImagesDump {
+			if dates.LatestImagesDumpAt == nil || archive.DumpDate.After(*dates.LatestImagesDumpAt) {
+				dumpDate := *archive.DumpDate
+				dates.LatestImagesDumpAt = &dumpDate
+			}
+		}
+		result[archive.WikiID] = dates
+	}
+	return result, nil
 }
 
 // GetByIAIdentifier retrieves an archive by Archive.org identifier
