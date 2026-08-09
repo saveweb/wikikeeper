@@ -293,6 +293,27 @@ func TestWikiListLabelsUnfilteredFarmOptionAsAllWikis(t *testing.T) {
 	require.NotContains(t, rec.Body.String(), ">All Farms</option>")
 }
 
+func TestWikiListFiltersUpdateBrowserURL(t *testing.T) {
+	p := &Pages{
+		cfg:         &config.Config{LogLevel: "INFO"},
+		templateDir: "../../web/templates",
+	}
+	p.baseTemplates = p.parseBaseTemplates()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/wikis?status=ok", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, p.render(c, "wiki_list.html", M{
+		"Status": "ok", "Active": "", "Archive": "", "Farm": "", "Search": "", "OrderBy": "updated_at DESC",
+		"Total": int64(0), "Page": 1, "PageSize": 20, "Pages": 1, "BaseURL": "/wikis",
+	}))
+
+	require.Contains(t, rec.Body.String(), `id="wiki-filters"`)
+	require.Contains(t, rec.Body.String(), `hx-push-url="true"`)
+}
+
 func TestExtensionDetailUsesSitenameWhenWikiNameIsMissing(t *testing.T) {
 	wikiID := uuid.New()
 	sitename := "MoeGirl London Bridge"

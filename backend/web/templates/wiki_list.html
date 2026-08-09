@@ -6,7 +6,7 @@
     </div>
 
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <form id="wiki-filters" class="flex flex-wrap gap-3 items-end">
+        <form id="wiki-filters" class="flex flex-wrap gap-3 items-end" hx-push-url="true">
             <div class="flex-1 min-w-[200px]">
                 <input type="text" name="search" value="{{.Search}}" placeholder="Search wikis..."
                        hx-get="/wikis" hx-target="#wiki-list-content" hx-swap="innerHTML"
