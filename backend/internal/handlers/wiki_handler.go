@@ -37,6 +37,7 @@ type ListWikisRequest struct {
 	Page       int    `query:"page"`
 	PageSize   int    `query:"page_size"`
 	Status     string `query:"status"`
+	IsActive   string `query:"is_active"`
 	HasArchive *bool  `query:"has_archive"`
 	Farm       string `query:"farm"`
 	Search     string `query:"search"`
@@ -78,10 +79,16 @@ func (h *WikiHandler) List(c echo.Context) error {
 		OrderBy:  orderBy,
 	}
 
-	if req.Status != "" {
-		status := models.WikiStatus(req.Status)
-		opts.Status = &status
+	status, err := repository.ParseWikiStatusFilter(req.Status)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"detail": "Invalid status value"})
 	}
+	opts.Status = status
+	active, err := repository.ParseWikiActiveFilter(req.IsActive)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"detail": "Invalid is_active value"})
+	}
+	opts.IsActive = active
 	if req.HasArchive != nil {
 		opts.HasArchive = req.HasArchive
 	}
@@ -176,6 +183,7 @@ func (h *WikiHandler) Create(c echo.Context) error {
 		URL:              wikiURL,
 		Status:           models.WikiStatusPending,
 		CollectionStatus: models.CollectionStatusPending,
+		IsActive:         true,
 	}
 	if req.WikiName != nil {
 		wiki.WikiName = req.WikiName

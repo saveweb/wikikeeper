@@ -340,8 +340,6 @@ func statusColor(v any) string {
 		return "red"
 	case "pending":
 		return "yellow"
-	case "offline":
-		return "gray"
 	default:
 		return "gray"
 	}

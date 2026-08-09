@@ -67,6 +67,7 @@ type ListOptions struct {
 	Page       int
 	PageSize   int
 	Status     *models.WikiStatus
+	IsActive   *bool
 	HasArchive *bool
 	Farm       string
 	Search     string // Search in sitename
@@ -87,6 +88,41 @@ const (
 
 // ErrInvalidWikiOrder indicates an unsupported wiki list ordering.
 var ErrInvalidWikiOrder = errors.New("invalid wiki order")
+
+// ErrInvalidWikiActiveFilter indicates an unsupported activity filter.
+var ErrInvalidWikiActiveFilter = errors.New("invalid wiki active filter")
+
+// ErrInvalidWikiStatusFilter indicates an unsupported wiki status filter.
+var ErrInvalidWikiStatusFilter = errors.New("invalid wiki status filter")
+
+// ParseWikiStatusFilter maps an external filter to a supported wiki status.
+func ParseWikiStatusFilter(value string) (*models.WikiStatus, error) {
+	status := models.WikiStatus(value)
+	switch status {
+	case "":
+		return nil, nil
+	case models.WikiStatusPending, models.WikiStatusOK, models.WikiStatusError:
+		return &status, nil
+	default:
+		return nil, ErrInvalidWikiStatusFilter
+	}
+}
+
+// ParseWikiActiveFilter maps an external filter to an optional boolean.
+func ParseWikiActiveFilter(value string) (*bool, error) {
+	switch value {
+	case "":
+		return nil, nil
+	case "true":
+		active := true
+		return &active, nil
+	case "false":
+		active := false
+		return &active, nil
+	default:
+		return nil, ErrInvalidWikiActiveFilter
+	}
+}
 
 func validateWikiOrder(order WikiOrder) error {
 	switch order {
@@ -136,6 +172,9 @@ func (r *WikiRepository) List(ctx context.Context, opts ListOptions) ([]*models.
 	// Apply filters
 	if opts.Status != nil {
 		query = query.Where("status = ?", *opts.Status)
+	}
+	if opts.IsActive != nil {
+		query = query.Where("is_active = ?", *opts.IsActive)
 	}
 	if opts.HasArchive != nil {
 		query = query.Where("has_archive = ?", *opts.HasArchive)
@@ -201,6 +240,21 @@ func (r *WikiRepository) ListFarms(ctx context.Context) ([]models.WikiFarm, erro
 // Update updates a wiki
 func (r *WikiRepository) Update(ctx context.Context, wiki *models.Wiki) error {
 	return r.db.WithContext(ctx).Save(wiki).Error
+}
+
+// SetActive enables or disables scheduled checks for a wiki.
+func (r *WikiRepository) SetActive(ctx context.Context, id uuid.UUID, active bool) error {
+	result := r.db.WithContext(ctx).
+		Model(&models.Wiki{}).
+		Where("id = ?", id).
+		Update("is_active", active)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // UpdateArchiveStatus updates only archive-owned fields. UpdateColumns avoids

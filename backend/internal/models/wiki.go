@@ -25,7 +25,6 @@ const (
 	WikiStatusPending WikiStatus = "pending"
 	WikiStatusOK      WikiStatus = "ok"
 	WikiStatusError   WikiStatus = "error"
-	WikiStatusOffline WikiStatus = "offline"
 )
 
 // CollectionStatus describes the latest collection attempt independently of
@@ -80,7 +79,7 @@ type Wiki struct {
 	LastCheckAt *time.Time `gorm:"index" json:"stats_last_check_at,omitempty"`
 
 	// Settings
-	IsActive bool `gorm:"not null;default:true" json:"is_active,omitempty"`
+	IsActive bool `gorm:"not null;default:true" json:"is_active"`
 
 	// Relations
 	Stats    []WikiStats   `gorm:"foreignKey:WikiID;constraint:OnDelete:CASCADE" json:"-"`

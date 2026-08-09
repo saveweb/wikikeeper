@@ -34,7 +34,7 @@ func TestRenderPartialLoadsPageTemplate(t *testing.T) {
 			templateName: "wiki_list_content",
 			data: M{
 				"Total": 0, "Page": 2, "PageSize": 20, "Pages": 3,
-				"Status": "", "Archive": "", "Search": "", "OrderBy": "updated_at DESC",
+				"Status": "", "Active": "", "Archive": "", "Search": "", "OrderBy": "updated_at DESC",
 				"BaseURL": "/wikis", "ListTarget": "#wiki-list-content",
 			},
 			want:       "0 wikis found",
@@ -199,6 +199,27 @@ func TestWikiListRendersThumbnail(t *testing.T) {
 	require.Contains(t, rec.Body.String(), `src="/api/wikis/`+wikiID.String()+`/thumbnail"`)
 }
 
+func TestWikiListRendersDisabledMonitoringState(t *testing.T) {
+	wikiID := uuid.New()
+	p := &Pages{cfg: &config.Config{LogLevel: "INFO"}, templateDir: "../../web/templates"}
+	p.baseTemplates = p.parseBaseTemplates()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/wikis", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, p.renderPartial(c, "wiki_list.html", "wiki_list_content", M{
+		"Wikis": []*models.Wiki{{
+			ID: wikiID, URL: "https://disabled.example", Status: models.WikiStatusError, IsActive: false,
+		}},
+		"Total": int64(1), "Page": 1, "PageSize": 20, "Pages": 1,
+		"BaseURL": "/wikis", "Active": "false",
+	}))
+
+	require.Contains(t, rec.Body.String(), "monitoring disabled")
+}
+
 func TestWikiListLabelsUnfilteredFarmOptionAsAllWikis(t *testing.T) {
 	p := &Pages{
 		cfg:         &config.Config{LogLevel: "INFO"},
@@ -212,7 +233,7 @@ func TestWikiListLabelsUnfilteredFarmOptionAsAllWikis(t *testing.T) {
 	c := e.NewContext(req, rec)
 
 	require.NoError(t, p.render(c, "wiki_list.html", M{
-		"Status": "", "Archive": "", "Farm": "", "Search": "", "OrderBy": "updated_at DESC",
+		"Status": "", "Active": "", "Archive": "", "Farm": "", "Search": "", "OrderBy": "updated_at DESC",
 		"Total": int64(0), "Page": 1, "PageSize": 20, "Pages": 1, "BaseURL": "/wikis",
 	}))
 

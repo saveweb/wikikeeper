@@ -109,6 +109,24 @@ func TestMarkWikiOasisFarmMigrationIsRegistered(t *testing.T) {
 	require.Contains(t, up, "wikioasis\\.org")
 }
 
+func TestRemoveOfflineStatusMigrationIsRegistered(t *testing.T) {
+	require.Equal(t, "remove_offline_status", getMigrationName(16))
+
+	up, err := readMigrationFile(16, "up")
+	require.NoError(t, err)
+	for _, fragment := range []string{
+		"SET status = 'error'",
+		"WHERE status = 'offline'",
+		"CHECK (status IN ('pending', 'ok', 'error'))",
+	} {
+		require.Contains(t, up, fragment)
+	}
+
+	down, err := readMigrationFile(16, "down")
+	require.NoError(t, err)
+	require.Contains(t, down, "'offline'")
+}
+
 func TestMarkWikiGGFarmMigrationIsRegistered(t *testing.T) {
 	require.Equal(t, "mark_wikigg_farm", getMigrationName(15))
 	up, err := readMigrationFile(15, "up")

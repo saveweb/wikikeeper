@@ -93,6 +93,7 @@ func (p *Pages) WikiList(c echo.Context) error {
 	}
 	pageSize := 20
 	status := c.QueryParam("status")
+	active := c.QueryParam("is_active")
 	archive := c.QueryParam("has_archive")
 	farm := c.QueryParam("farm")
 	search := c.QueryParam("search")
@@ -101,10 +102,13 @@ func (p *Pages) WikiList(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid order_by value")
 	}
 
-	var statusFilter *models.WikiStatus
-	if status != "" {
-		s := models.WikiStatus(status)
-		statusFilter = &s
+	statusFilter, err := repository.ParseWikiStatusFilter(status)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid status value")
+	}
+	activeFilter, err := repository.ParseWikiActiveFilter(active)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid is_active value")
 	}
 	var archiveFilter *bool
 	if archive == "true" {
@@ -120,6 +124,7 @@ func (p *Pages) WikiList(c echo.Context) error {
 		Page:       page,
 		PageSize:   pageSize,
 		Status:     statusFilter,
+		IsActive:   activeFilter,
 		HasArchive: archiveFilter,
 		Farm:       farm,
 		Search:     search,
@@ -135,6 +140,7 @@ func (p *Pages) WikiList(c echo.Context) error {
 	data["PageSize"] = pageSize
 	data["Pages"] = totalPages(total, pageSize)
 	data["Status"] = status
+	data["Active"] = active
 	data["Archive"] = archive
 	data["Farm"] = farm
 	data["Search"] = search
@@ -246,6 +252,27 @@ func (p *Pages) WikiDetail(c echo.Context) error {
 	}
 
 	return p.render(c, "wiki_detail.html", data)
+}
+
+func (p *Pages) AdminSetWikiActive(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid wiki ID")
+	}
+	active, err := repository.ParseWikiActiveFilter(c.FormValue("is_active"))
+	if err != nil || active == nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid is_active value")
+	}
+
+	if err := repository.NewWikiRepository(p.db).SetActive(c.Request().Context(), id, *active); err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return echo.NewHTTPError(http.StatusNotFound, "Wiki not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+
+	c.Response().Header().Set("HX-Redirect", "/wikis/"+id.String())
+	return c.NoContent(http.StatusNoContent)
 }
 
 func (p *Pages) WikiExtensionsCompare(c echo.Context) error {

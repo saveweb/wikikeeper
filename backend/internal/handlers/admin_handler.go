@@ -61,6 +61,36 @@ func (h *AdminHandler) DeleteWiki(c echo.Context) error {
 	})
 }
 
+type updateWikiRequest struct {
+	IsActive *bool `json:"is_active"`
+}
+
+// UpdateWiki changes admin-owned wiki settings.
+func (h *AdminHandler) UpdateWiki(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"detail": "Invalid wiki ID format"})
+	}
+
+	var req updateWikiRequest
+	if err := c.Bind(&req); err != nil || req.IsActive == nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"detail": "is_active is required"})
+	}
+	if err := repository.NewWikiRepository(h.db).SetActive(c.Request().Context(), id, *req.IsActive); err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return c.JSON(http.StatusNotFound, map[string]string{"detail": "Wiki not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"detail": err.Error()})
+	}
+
+	applogger.Log.Info("[Admin] Wiki monitoring updated", "id", id, "is_active", *req.IsActive)
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"detail":    "Wiki monitoring updated",
+		"wiki_id":   id.String(),
+		"is_active": *req.IsActive,
+	})
+}
+
 // CollectAll handles POST /api/admin/collect-all
 // Triggers collection for all active wikis
 func (h *AdminHandler) CollectAll(c echo.Context) error {

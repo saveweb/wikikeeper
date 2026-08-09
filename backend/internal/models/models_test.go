@@ -16,7 +16,6 @@ func TestWikiStatus(t *testing.T) {
 		{WikiStatusPending, "pending"},
 		{WikiStatusOK, "ok"},
 		{WikiStatusError, "error"},
-		{WikiStatusOffline, "offline"},
 	}
 
 	for _, tt := range tests {
@@ -103,6 +102,21 @@ func TestWikiJSONSerialization(t *testing.T) {
 
 	if result["api_available"] != true {
 		t.Errorf("Expected api_available true, got %v", result["api_available"])
+	}
+}
+
+func TestInactiveWikiJSONIncludesIsActive(t *testing.T) {
+	data, err := json.Marshal(Wiki{IsActive: false})
+	if err != nil {
+		t.Fatalf("Failed to marshal: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("Failed to unmarshal: %v", err)
+	}
+	if active, exists := result["is_active"]; !exists || active != false {
+		t.Fatalf("Expected is_active=false, got %v (exists=%v)", active, exists)
 	}
 }
 

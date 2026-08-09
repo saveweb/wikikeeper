@@ -364,6 +364,52 @@ func TestWikiRepository_List_FilterByStatus(t *testing.T) {
 	assert.Equal(t, models.WikiStatusOK, wikis[0].Status)
 }
 
+func TestWikiRepository_List_FilterByIsActive(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewWikiRepository(db)
+	ctx := context.Background()
+
+	require.NoError(t, repo.Create(ctx, &models.Wiki{URL: "https://enabled.example", Status: models.WikiStatusOK, IsActive: true}))
+	disabled := &models.Wiki{ID: uuid.New(), URL: "https://disabled.example", Status: models.WikiStatusError, IsActive: true}
+	require.NoError(t, repo.Create(ctx, disabled))
+	require.NoError(t, repo.SetActive(ctx, disabled.ID, false))
+
+	active := false
+	wikis, total, err := repo.List(ctx, ListOptions{IsActive: &active})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, wikis, 1)
+	require.Equal(t, "https://disabled.example", wikis[0].URL)
+}
+
+func TestParseWikiActiveFilter(t *testing.T) {
+	filter, err := ParseWikiActiveFilter("")
+	require.NoError(t, err)
+	require.Nil(t, filter)
+
+	filter, err = ParseWikiActiveFilter("false")
+	require.NoError(t, err)
+	require.NotNil(t, filter)
+	require.False(t, *filter)
+
+	_, err = ParseWikiActiveFilter("disabled")
+	require.ErrorIs(t, err, ErrInvalidWikiActiveFilter)
+}
+
+func TestParseWikiStatusFilter(t *testing.T) {
+	filter, err := ParseWikiStatusFilter("")
+	require.NoError(t, err)
+	require.Nil(t, filter)
+
+	filter, err = ParseWikiStatusFilter("error")
+	require.NoError(t, err)
+	require.NotNil(t, filter)
+	require.Equal(t, models.WikiStatusError, *filter)
+
+	_, err = ParseWikiStatusFilter("offline")
+	require.ErrorIs(t, err, ErrInvalidWikiStatusFilter)
+}
+
 func TestWikiRepository_List_FilterByHasArchive(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewWikiRepository(db)
@@ -459,6 +505,22 @@ func TestWikiRepository_Update(t *testing.T) {
 	found, err := repo.GetByID(ctx, wiki.ID)
 	require.NoError(t, err)
 	assert.Equal(t, models.WikiStatusOK, found.Status)
+}
+
+func TestWikiRepository_SetActivePreservesStatus(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewWikiRepository(db)
+	ctx := context.Background()
+	wiki := &models.Wiki{ID: uuid.New(), URL: "https://example.net", Status: models.WikiStatusError, IsActive: true}
+	require.NoError(t, repo.Create(ctx, wiki))
+
+	require.NoError(t, repo.SetActive(ctx, wiki.ID, false))
+	updated, err := repo.GetByID(ctx, wiki.ID)
+	require.NoError(t, err)
+	require.False(t, updated.IsActive)
+	require.Equal(t, models.WikiStatusError, updated.Status)
+
+	require.ErrorIs(t, repo.SetActive(ctx, uuid.New(), true), gorm.ErrRecordNotFound)
 }
 
 func TestWikiRepository_GetDueForUpdate(t *testing.T) {

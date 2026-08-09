@@ -19,7 +19,12 @@
                 <option value="ok" {{if eq .Status "ok"}}selected{{end}}>OK</option>
                 <option value="error" {{if eq .Status "error"}}selected{{end}}>Error</option>
                 <option value="pending" {{if eq .Status "pending"}}selected{{end}}>Pending</option>
-                <option value="offline" {{if eq .Status "offline"}}selected{{end}}>Offline</option>
+            </select>
+            <select name="is_active" hx-get="/wikis" hx-target="#wiki-list-content" hx-swap="innerHTML" hx-include="#wiki-filters"
+                    hx-trigger="change" class="border border-gray-300 rounded px-3 py-2 text-sm">
+                <option value="" {{if eq .Active ""}}selected{{end}}>All Monitoring</option>
+                <option value="true" {{if eq .Active "true"}}selected{{end}}>Enabled</option>
+                <option value="false" {{if eq .Active "false"}}selected{{end}}>Disabled</option>
             </select>
             <select name="has_archive" hx-get="/wikis" hx-target="#wiki-list-content" hx-swap="innerHTML" hx-include="#wiki-filters"
                     hx-trigger="change" class="border border-gray-300 rounded px-3 py-2 text-sm">
@@ -87,6 +92,9 @@
                     <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-{{statusColor .Status}}-100 text-{{statusColor .Status}}-700">
                         {{.Status}}
                     </span>
+                    {{if not .IsActive}}
+                    <div class="mt-1 text-xs font-medium text-gray-600">monitoring disabled</div>
+                    {{end}}
                     {{if eq .CollectionStatus "rate_limited"}}
                     <div class="mt-1 text-xs text-amber-700">rate limited</div>
                     {{else if eq .CollectionStatus "error"}}

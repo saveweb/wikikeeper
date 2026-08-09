@@ -126,6 +126,7 @@ func main() {
 	admin := e.Group("/admin")
 	admin.Use(appmiddleware.AdminAuth(cfg))
 	admin.DELETE("/wikis/:id", pagesHandler.AdminDeleteWiki)
+	admin.POST("/wikis/:id/monitoring", pagesHandler.AdminSetWikiActive)
 	admin.POST("/collect-all", pagesHandler.AdminCollectAll)
 	admin.POST("/check-all-archives", pagesHandler.AdminCheckAllArchives)
 
@@ -163,6 +164,7 @@ func main() {
 
 	// Admin wiki management
 	adminAPI.DELETE("/wikis/:id", adminHandler.DeleteWiki)
+	adminAPI.PATCH("/wikis/:id", adminHandler.UpdateWiki)
 	adminAPI.GET("/wikis/:id/stats", adminHandler.GetWikiStats)
 
 	// Admin bulk operations

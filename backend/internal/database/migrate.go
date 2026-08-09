@@ -82,6 +82,10 @@ var migrations = []Migration{
 		Version: 15,
 		Name:    "mark_wikigg_farm",
 	},
+	{
+		Version: 16,
+		Name:    "remove_offline_status",
+	},
 }
 
 // RunMigrations executes all pending migrations

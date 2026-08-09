@@ -14,6 +14,11 @@
         >
             {{.Wiki.Status}}
         </span>
+        {{if not .Wiki.IsActive}}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-700">
+            monitoring disabled
+        </span>
+        {{end}}
         {{if eq .Wiki.CollectionStatus "rate_limited"}}
         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
             collection: rate limited
@@ -116,6 +121,15 @@
             Check Archive
         </button>
         {{if .IsAdmin}}
+        <button
+            hx-post="/admin/wikis/{{.Wiki.ID}}/monitoring"
+            hx-vals='{"is_active":"{{if .Wiki.IsActive}}false{{else}}true{{end}}"}'
+            hx-confirm="{{if .Wiki.IsActive}}Disable scheduled checks for this wiki?{{else}}Enable scheduled checks for this wiki?{{end}}"
+            hx-swap="none"
+            class="border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded text-sm font-medium hover:bg-gray-50"
+        >
+            {{if .Wiki.IsActive}}Disable Monitoring{{else}}Enable Monitoring{{end}}
+        </button>
         <button
             hx-delete="/admin/wikis/{{.Wiki.ID}}"
             hx-confirm="Delete this wiki? This cannot be undone."

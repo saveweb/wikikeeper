@@ -22,3 +22,27 @@ func TestWikiHandlerListRejectsInvalidOrder(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.JSONEq(t, `{"detail":"Invalid order_by value"}`, rec.Body.String())
 }
+
+func TestWikiHandlerListRejectsInvalidIsActive(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/wikis?is_active=disabled", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	handler := NewWikiHandler(nil, nil, nil)
+
+	require.NoError(t, handler.List(c))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.JSONEq(t, `{"detail":"Invalid is_active value"}`, rec.Body.String())
+}
+
+func TestWikiHandlerListRejectsOfflineStatus(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/wikis?status=offline", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	handler := NewWikiHandler(nil, nil, nil)
+
+	require.NoError(t, handler.List(c))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.JSONEq(t, `{"detail":"Invalid status value"}`, rec.Body.String())
+}
