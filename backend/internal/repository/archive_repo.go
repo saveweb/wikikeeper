@@ -57,6 +57,18 @@ func (r *ArchiveRepository) GetByWikiID(ctx context.Context, wikiID uuid.UUID) (
 	return archives, nil
 }
 
+// GetLatestByWikiID retrieves the archive with the newest dump date for a wiki.
+func (r *ArchiveRepository) GetLatestByWikiID(ctx context.Context, wikiID uuid.UUID) (*models.WikiArchive, error) {
+	var archive models.WikiArchive
+	if err := r.db.WithContext(ctx).
+		Where("wiki_id = ?", wikiID).
+		Order("dump_date DESC").
+		Take(&archive).Error; err != nil {
+		return nil, err
+	}
+	return &archive, nil
+}
+
 // GetByIAIdentifier retrieves an archive by Archive.org identifier
 func (r *ArchiveRepository) GetByIAIdentifier(ctx context.Context, iaIdentifier string) (*models.WikiArchive, error) {
 	var archive models.WikiArchive

@@ -448,10 +448,9 @@ func (h *WikiHandler) GetThumbnail(c echo.Context) error {
 	}
 
 	// Try to get the most recent archive for this wiki
-	archives, err := archiveRepo.GetByWikiID(ctx, id)
-	if err == nil && len(archives) > 0 {
-		// Get the most recent archive (archives are ordered by added_date DESC)
-		mostRecent := archives[0]
+	mostRecent, err := archiveRepo.GetLatestByWikiID(ctx, id)
+	if err == nil {
+		// The latest archive is selected by dump date, not its Archive.org added date.
 		if mostRecent.IAIdentifier != "" {
 			return c.Redirect(http.StatusFound, fmt.Sprintf("https://archive.org/services/img/%s", mostRecent.IAIdentifier))
 		}
