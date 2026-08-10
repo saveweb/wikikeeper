@@ -463,26 +463,43 @@ func TestWikiRepository_List_FilterByFarm(t *testing.T) {
 }
 
 func TestWikiRepository_List_Search(t *testing.T) {
-	t.Skip("ILIKE is PostgreSQL-specific, not supported in SQLite test database")
-
 	db := setupTestDB(t)
 	repo := NewWikiRepository(db)
 	ctx := context.Background()
 
-	// Create wikis
 	sitename1 := "English Wikipedia"
 	sitename2 := "French Wikipedia"
 	sitename3 := "WikiFur"
-	repo.Create(ctx, &models.Wiki{URL: "https://en.com", Sitename: &sitename1, Status: models.WikiStatusOK})
-	repo.Create(ctx, &models.Wiki{URL: "https://fr.com", Sitename: &sitename2, Status: models.WikiStatusOK})
-	repo.Create(ctx, &models.Wiki{URL: "https://fur.com", Sitename: &sitename3, Status: models.WikiStatusOK})
+	apiURL := "https://api.special.example/w/api.php"
+	indexURL := "https://index.special.example/w/index.php"
+	require.NoError(t, repo.Create(ctx, &models.Wiki{URL: "https://en.com", Sitename: &sitename1, Status: models.WikiStatusOK}))
+	require.NoError(t, repo.Create(ctx, &models.Wiki{URL: "https://fr.com", Sitename: &sitename2, Status: models.WikiStatusOK}))
+	require.NoError(t, repo.Create(ctx, &models.Wiki{URL: "https://fur.com", Sitename: &sitename3, Status: models.WikiStatusOK}))
+	require.NoError(t, repo.Create(ctx, &models.Wiki{URL: "https://unrelated.example", APIURL: &apiURL, Status: models.WikiStatusOK}))
+	require.NoError(t, repo.Create(ctx, &models.Wiki{URL: "https://another-unrelated.example", IndexURL: &indexURL, Status: models.WikiStatusOK}))
 
 	wikis, total, err := repo.List(ctx, ListOptions{
-		Search: "Wikipedia",
+		Search: "wIkIpEdIa",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), total)
 	assert.Len(t, wikis, 2)
+
+	wikis, total, err = repo.List(ctx, ListOptions{
+		Search: "http://api.special.example/w/api.php",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Len(t, wikis, 1)
+	assert.Equal(t, "https://unrelated.example", wikis[0].URL)
+
+	wikis, total, err = repo.List(ctx, ListOptions{
+		Search: "http://index.special.example/w/index.php",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Len(t, wikis, 1)
+	assert.Equal(t, "https://another-unrelated.example", wikis[0].URL)
 }
 
 func TestWikiRepository_Update(t *testing.T) {

@@ -90,6 +90,10 @@ var migrations = []Migration{
 		Version: 17,
 		Name:    "add_archive_redirects_list",
 	},
+	{
+		Version: 18,
+		Name:    "add_wiki_search_trigram_indexes",
+	},
 }
 
 // RunMigrations executes all pending migrations

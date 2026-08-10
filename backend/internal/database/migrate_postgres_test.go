@@ -2,6 +2,7 @@ package database
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -228,6 +229,29 @@ func TestCollectionStateMigrationPostgres(t *testing.T) {
 	var appliedCount int64
 	require.NoError(t, db.Table("schema_migrations").Count(&appliedCount).Error)
 	require.EqualValues(t, len(migrations), appliedCount)
+
+	var pgTrgmInstalled bool
+	require.NoError(t, db.Raw(`
+		SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')
+	`).Scan(&pgTrgmInstalled).Error)
+	require.True(t, pgTrgmInstalled)
+	for indexName, column := range map[string]string{
+		"idx_wikis_sitename_trgm":  "sitename",
+		"idx_wikis_url_trgm":       "url",
+		"idx_wikis_api_url_trgm":   "api_url",
+		"idx_wikis_index_url_trgm": "index_url",
+	} {
+		var indexDefinition string
+		require.NoError(t, db.Raw(`
+			SELECT indexdef
+			FROM pg_indexes
+			WHERE schemaname = 'public' AND indexname = ?
+		`, indexName).Scan(&indexDefinition).Error)
+		indexDefinition = strings.ToLower(indexDefinition)
+		require.Contains(t, indexDefinition, "using gin")
+		require.Contains(t, indexDefinition, "lower(("+column+")::text)")
+		require.Contains(t, indexDefinition, "gin_trgm_ops")
+	}
 	require.NoError(t, db.Raw(`
 		SELECT COUNT(*)
 		FROM information_schema.columns

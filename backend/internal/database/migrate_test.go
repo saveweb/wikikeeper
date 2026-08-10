@@ -145,3 +145,30 @@ func TestMarkWikiGGFarmMigrationIsRegistered(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, up, "wiki\\.gg")
 }
+
+func TestWikiSearchTrigramIndexesMigrationIsRegistered(t *testing.T) {
+	require.Equal(t, "add_wiki_search_trigram_indexes", getMigrationName(18))
+
+	up, err := readMigrationFile(18, "up")
+	require.NoError(t, err)
+	for _, fragment := range []string{
+		"CREATE EXTENSION IF NOT EXISTS pg_trgm",
+		"LOWER(sitename) gin_trgm_ops",
+		"LOWER(url) gin_trgm_ops",
+		"LOWER(api_url) gin_trgm_ops",
+		"LOWER(index_url) gin_trgm_ops",
+	} {
+		require.Contains(t, up, fragment)
+	}
+
+	down, err := readMigrationFile(18, "down")
+	require.NoError(t, err)
+	for _, index := range []string{
+		"idx_wikis_sitename_trgm",
+		"idx_wikis_url_trgm",
+		"idx_wikis_api_url_trgm",
+		"idx_wikis_index_url_trgm",
+	} {
+		require.Contains(t, down, "DROP INDEX IF EXISTS "+index)
+	}
+}

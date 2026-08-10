@@ -70,7 +70,7 @@ type ListOptions struct {
 	IsActive   *bool
 	HasArchive *bool
 	Farm       string
-	Search     string // Search in sitename
+	Search     string // Search in sitename, URL, API URL, and index URL
 	OrderBy    WikiOrder
 }
 
@@ -190,11 +190,15 @@ func (r *WikiRepository) List(ctx context.Context, opts ListOptions) ([]*models.
 		cleanSearch = strings.TrimPrefix(cleanSearch, "https://")
 		cleanSearch = strings.TrimPrefix(cleanSearch, "www.")
 
-		// Search in sitename or URL (with or without protocol)
+		// Search in sitename, URL, API URL, or index URL (with or without protocol)
 		searchPattern := "%" + opts.Search + "%"
 		cleanPattern := "%" + cleanSearch + "%"
-		query = query.Where("sitename ILIKE ? OR url ILIKE ? OR url ILIKE ?",
-			searchPattern, searchPattern, cleanPattern)
+		query = query.Where(`
+			LOWER(sitename) LIKE LOWER(?) OR
+			LOWER(url) LIKE LOWER(?) OR
+			LOWER(api_url) LIKE LOWER(?) OR
+			LOWER(index_url) LIKE LOWER(?)
+		`, searchPattern, cleanPattern, cleanPattern, cleanPattern)
 	}
 
 	// Count total
