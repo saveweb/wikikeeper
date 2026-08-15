@@ -102,10 +102,18 @@ func (s *CollectorService) collectWiki(ctx context.Context, wiki *models.Wiki) e
 	var err error
 	wikiRepo := repository.NewWikiRepository(s.db)
 
+	storedIndexURL := wiki.IndexURL
+	if wiki.APIURL != nil && storedIndexURL == nil {
+		_, _, derivedIndexURL, ok := NormalizeExplicitAPIURL(*wiki.APIURL)
+		if ok {
+			storedIndexURL = &derivedIndexURL
+		}
+	}
+
 	// If API URL exists, try using it directly first
-	if wiki.APIURL != nil && wiki.IndexURL != nil {
+	if wiki.APIURL != nil && storedIndexURL != nil {
 		collectorLog.Info("Using existing API URL", "api_url", *wiki.APIURL)
-		client = s.mwService.CreateClientWithURL(wiki.URL, *wiki.APIURL, *wiki.IndexURL)
+		client = s.mwService.CreateClientWithURL(wiki.URL, *wiki.APIURL, *storedIndexURL)
 
 		// Try to fetch siteinfo with existing API URL
 		siteinfo, err = s.mwService.FetchSiteinfo(ctx, client)

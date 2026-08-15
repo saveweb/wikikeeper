@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -143,21 +142,9 @@ func (h *WikiHandler) Create(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"detail": "URL is required"})
 	}
 
-	// Check if URL ends with /api.php
-	rawURL := strings.TrimSpace(req.URL)
-	var apiURL string
-	var wikiURL string
-
-	if strings.HasSuffix(strings.TrimSuffix(rawURL, "/"), "/api.php") {
-		// User provided API URL directly
-		apiURL = strings.TrimSuffix(rawURL, "/")
-		// Wiki URL is the API URL with /api.php removed
-		wikiURL = strings.TrimSuffix(apiURL, "/api.php")
-		wikiURL = services.NormalizeURL(wikiURL)
-		if wikiURL == "" {
-			return c.JSON(http.StatusBadRequest, map[string]string{"detail": "Invalid URL format"})
-		}
-	} else {
+	var apiURL, indexURL, wikiURL string
+	var explicitAPI bool
+	if wikiURL, apiURL, indexURL, explicitAPI = services.NormalizeExplicitAPIURL(req.URL); !explicitAPI {
 		// Normal wiki URL, use existing logic
 		wikiURL = services.NormalizeURL(req.URL)
 		if wikiURL == "" {
@@ -189,8 +176,9 @@ func (h *WikiHandler) Create(c echo.Context) error {
 		wiki.WikiName = req.WikiName
 	}
 	// If API URL was provided directly, set it
-	if apiURL != "" {
+	if explicitAPI {
 		wiki.APIURL = &apiURL
+		wiki.IndexURL = &indexURL
 	}
 
 	if err := wikiRepo.Create(ctx, wiki); err != nil {

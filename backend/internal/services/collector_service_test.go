@@ -109,6 +109,38 @@ func TestCollectorDoesNotRedetectKnownAPIOnRateLimit(t *testing.T) {
 	require.Contains(t, *updated.LastError, "HTTP 429")
 }
 
+func TestCollectorDerivesMissingIndexURLFromKnownAPI(t *testing.T) {
+	var requestedPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"query":{"general":{"sitename":"Example Wiki","lang":"en","generator":"MediaWiki 1.42","dbtype":"mysql","dbversion":"8.0"}}}`))
+	}))
+	defer server.Close()
+
+	db := setupCollectorTestDB(t)
+	apiURL := server.URL + "/Wiki/api.php"
+	wiki := &models.Wiki{
+		ID:               uuid.New(),
+		URL:              server.URL + "/Wiki",
+		APIURL:           &apiURL,
+		Status:           models.WikiStatusPending,
+		CollectionStatus: models.CollectionStatusPending,
+		IsActive:         true,
+	}
+	require.NoError(t, db.Create(wiki).Error)
+
+	collector := NewCollectorService(db, NewMediaWikiService(time.Second, "WikiKeeper-Test/1.0"), &config.Config{})
+	err := collector.CollectSingleWiki(context.Background(), wiki.ID)
+	require.ErrorContains(t, err, "no such table: wiki_stats")
+	require.Equal(t, "/Wiki/api.php", requestedPath)
+
+	var updated models.Wiki
+	require.NoError(t, db.First(&updated, "id = ?", wiki.ID).Error)
+	require.NotNil(t, updated.IndexURL)
+	require.Equal(t, server.URL+"/Wiki/index.php", *updated.IndexURL)
+}
+
 func TestCollectorDoesNotRedetectMissingKnownFandomAPI(t *testing.T) {
 	var requests atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

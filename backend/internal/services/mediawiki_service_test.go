@@ -286,6 +286,45 @@ func TestNormalizeURL(t *testing.T) {
 	}
 }
 
+func TestNormalizeExplicitAPIURL(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantWiki  string
+		wantAPI   string
+		wantIndex string
+		wantOK    bool
+	}{
+		{
+			name:      "preserves case-sensitive install path",
+			input:     "https://www.vgmpf.com/Wiki/api.php",
+			wantWiki:  "https://www.vgmpf.com/Wiki",
+			wantAPI:   "https://www.vgmpf.com/Wiki/api.php",
+			wantIndex: "https://www.vgmpf.com/Wiki/index.php",
+			wantOK:    true,
+		},
+		{
+			name:      "accepts endpoint without scheme and trailing slash",
+			input:     "example.org/MediaWiki/API.PHP/",
+			wantWiki:  "https://example.org/MediaWiki",
+			wantAPI:   "https://example.org/MediaWiki/API.PHP",
+			wantIndex: "https://example.org/MediaWiki/index.php",
+			wantOK:    true,
+		},
+		{name: "rejects article URL", input: "https://example.org/wiki/Main_Page"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wikiURL, apiURL, indexURL, ok := NormalizeExplicitAPIURL(tt.input)
+			require.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantWiki, wikiURL)
+			assert.Equal(t, tt.wantAPI, apiURL)
+			assert.Equal(t, tt.wantIndex, indexURL)
+		})
+	}
+}
+
 func TestInitializeDetectsLocalizedMediaWikiPaths(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/pl/api.php" {
