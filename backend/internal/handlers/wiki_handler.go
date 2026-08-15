@@ -142,14 +142,9 @@ func (h *WikiHandler) Create(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"detail": "URL is required"})
 	}
 
-	var apiURL, indexURL, wikiURL string
-	var explicitAPI bool
-	if wikiURL, apiURL, indexURL, explicitAPI = services.NormalizeExplicitAPIURL(req.URL); !explicitAPI {
-		// Normal wiki URL, use existing logic
-		wikiURL = services.NormalizeURL(req.URL)
-		if wikiURL == "" {
-			return c.JSON(http.StatusBadRequest, map[string]string{"detail": "Invalid URL format"})
-		}
+	wikiURL, apiURL, indexURL, explicitAPI := services.NormalizeWikiInput(req.URL)
+	if wikiURL == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"detail": "Invalid URL format"})
 	}
 
 	wikiRepo := repository.NewWikiRepository(h.db)

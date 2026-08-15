@@ -325,6 +325,20 @@ func TestNormalizeExplicitAPIURL(t *testing.T) {
 	}
 }
 
+func TestNormalizeWikiInput(t *testing.T) {
+	wikiURL, apiURL, indexURL, explicitAPI := NormalizeWikiInput("https://www.vgmpf.com/Wiki/api.php")
+	require.True(t, explicitAPI)
+	assert.Equal(t, "https://www.vgmpf.com/Wiki", wikiURL)
+	assert.Equal(t, "https://www.vgmpf.com/Wiki/api.php", apiURL)
+	assert.Equal(t, "https://www.vgmpf.com/Wiki/index.php", indexURL)
+
+	wikiURL, apiURL, indexURL, explicitAPI = NormalizeWikiInput("https://example.org/wiki/Main_Page")
+	require.False(t, explicitAPI)
+	assert.Equal(t, "https://example.org", wikiURL)
+	assert.Empty(t, apiURL)
+	assert.Empty(t, indexURL)
+}
+
 func TestInitializeDetectsLocalizedMediaWikiPaths(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/pl/api.php" {

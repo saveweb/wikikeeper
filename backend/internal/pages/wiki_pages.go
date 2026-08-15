@@ -185,7 +185,7 @@ func (p *Pages) WikiAddSubmit(c echo.Context) error {
 	if rawURL == "" {
 		return c.HTML(http.StatusBadRequest, `<span class="text-red-600 text-sm">URL is required</span>`)
 	}
-	wikiURL := services.NormalizeURL(rawURL)
+	wikiURL, apiURL, indexURL, explicitAPI := services.NormalizeWikiInput(rawURL)
 	if wikiURL == "" {
 		return c.HTML(http.StatusBadRequest, `<span class="text-red-600 text-sm">Invalid wiki URL</span>`)
 	}
@@ -204,6 +204,10 @@ func (p *Pages) WikiAddSubmit(c echo.Context) error {
 		Status:           models.WikiStatusPending,
 		CollectionStatus: models.CollectionStatusPending,
 		IsActive:         true,
+	}
+	if explicitAPI {
+		wiki.APIURL = &apiURL
+		wiki.IndexURL = &indexURL
 	}
 	if wikiName != "" {
 		wiki.WikiName = &wikiName

@@ -5,6 +5,15 @@ import (
 	"strings"
 )
 
+// NormalizeWikiInput normalizes either a general wiki URL or an explicit API
+// endpoint. Explicit endpoints retain their case-sensitive install path.
+func NormalizeWikiInput(rawURL string) (wikiURL, apiURL, indexURL string, explicitAPI bool) {
+	if wikiURL, apiURL, indexURL, explicitAPI = NormalizeExplicitAPIURL(rawURL); explicitAPI {
+		return wikiURL, apiURL, indexURL, true
+	}
+	return NormalizeURL(rawURL), "", "", false
+}
+
 // NormalizeExplicitAPIURL parses a user-provided MediaWiki API endpoint while
 // preserving the path's case, which may be significant on the remote server.
 func NormalizeExplicitAPIURL(rawURL string) (wikiURL, apiURL, indexURL string, ok bool) {
