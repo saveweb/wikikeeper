@@ -236,6 +236,27 @@ func TestRateLimitBackoffParsingAndCap(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, 3*time.Minute, delay)
 
+	delay, ok = rateLimitBackoff(&HTTPStatusError{
+		StatusCode: http.StatusTooManyRequests,
+		RetryAfter: "30",
+	}, 5, now, zeroJitter)
+	require.True(t, ok)
+	require.Equal(t, 8*time.Minute, delay)
+
+	delay, ok = rateLimitBackoff(&HTTPStatusError{
+		StatusCode: http.StatusTooManyRequests,
+		RetryAfter: "86400",
+	}, 1, now, zeroJitter)
+	require.True(t, ok)
+	require.Equal(t, maxRateLimitBackoff, delay)
+
+	delay, ok = rateLimitBackoff(&HTTPStatusError{
+		StatusCode: http.StatusTooManyRequests,
+		RetryAfter: now.Add(24 * time.Hour).Format(http.TimeFormat),
+	}, 1, now, zeroJitter)
+	require.True(t, ok)
+	require.Equal(t, maxRateLimitBackoff, delay)
+
 	delay, ok = rateLimitBackoff(&HTTPStatusError{StatusCode: http.StatusTooManyRequests}, 99, now, zeroJitter)
 	require.True(t, ok)
 	require.Equal(t, maxRateLimitBackoff, delay)

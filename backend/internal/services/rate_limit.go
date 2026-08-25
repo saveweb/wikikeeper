@@ -44,9 +44,6 @@ func rateLimitBackoff(err error, consecutiveFailures int, now time.Time, jitter 
 	if !ok {
 		return 0, false
 	}
-	if delay, ok := parseRetryAfter(statusErr.RetryAfter, now); ok {
-		return delay, true
-	}
 
 	if consecutiveFailures < 1 {
 		consecutiveFailures = 1
@@ -61,6 +58,18 @@ func rateLimitBackoff(err error, consecutiveFailures int, now time.Time, jitter 
 	}
 	if jitter != nil {
 		delay += jitter(delay)
+	}
+	if delay > maxRateLimitBackoff {
+		delay = maxRateLimitBackoff
+	}
+
+	if retryAfter, ok := parseRetryAfter(statusErr.RetryAfter, now); ok {
+		if retryAfter > maxRateLimitBackoff {
+			retryAfter = maxRateLimitBackoff
+		}
+		if retryAfter > delay {
+			delay = retryAfter
+		}
 	}
 	return delay, true
 }

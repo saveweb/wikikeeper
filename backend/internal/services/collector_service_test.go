@@ -104,7 +104,9 @@ func TestCollectorDoesNotRedetectKnownAPIOnRateLimit(t *testing.T) {
 	require.Equal(t, 3, updated.ConsecutiveFailures)
 	require.NotNil(t, updated.LastCheckAt)
 	require.NotNil(t, updated.NextCheckAt)
-	require.WithinDuration(t, updated.LastCheckAt.Add(time.Minute), *updated.NextCheckAt, time.Second)
+	delay := updated.NextCheckAt.Sub(*updated.LastCheckAt)
+	require.GreaterOrEqual(t, delay, 2*time.Minute)
+	require.LessOrEqual(t, delay, 5*time.Minute/2)
 	require.NotNil(t, updated.LastError)
 	require.Contains(t, *updated.LastError, "HTTP 429")
 }
