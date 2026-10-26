@@ -746,3 +746,26 @@ func TestWikiRepository_GetPendingForUpdate(t *testing.T) {
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, len(wikis), 1)
 }
+
+func TestWikiRepository_List_SearchRespectsFilters(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewWikiRepository(db)
+	ctx := context.Background()
+
+	sitename := "Minecraft Wiki"
+	require.NoError(t, repo.Create(ctx, &models.Wiki{URL: "https://minecraft.fandom.com", Sitename: &sitename, Status: models.WikiStatusOK}))
+	require.NoError(t, repo.Create(ctx, &models.Wiki{URL: "https://minecraft.wiki", Sitename: &sitename, Status: models.WikiStatusError}))
+
+	wikis, total, err := repo.List(ctx, ListOptions{Farm: WikiFarmIndependentFilter, Search: "minecraft"})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, wikis, 1)
+	assert.Equal(t, "https://minecraft.wiki", wikis[0].URL)
+
+	status := models.WikiStatusOK
+	wikis, total, err = repo.List(ctx, ListOptions{Status: &status, Search: "minecraft"})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, wikis, 1)
+	assert.Equal(t, "https://minecraft.fandom.com", wikis[0].URL)
+}

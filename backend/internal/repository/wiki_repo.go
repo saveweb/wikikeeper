@@ -193,12 +193,15 @@ func (r *WikiRepository) List(ctx context.Context, opts ListOptions) ([]*models.
 		// Search in sitename, URL, API URL, or index URL (with or without protocol)
 		searchPattern := "%" + opts.Search + "%"
 		cleanPattern := "%" + cleanSearch + "%"
-		query = query.Where(`
+		// Parenthesize explicitly: GORM only auto-wraps conditions containing
+		// " OR " with spaces, so the line-broken ORs would otherwise escape
+		// the preceding AND filters.
+		query = query.Where(`(
 			LOWER(sitename) LIKE LOWER(?) OR
 			LOWER(url) LIKE LOWER(?) OR
 			LOWER(api_url) LIKE LOWER(?) OR
 			LOWER(index_url) LIKE LOWER(?)
-		`, searchPattern, cleanPattern, cleanPattern, cleanPattern)
+		)`, searchPattern, cleanPattern, cleanPattern, cleanPattern)
 	}
 
 	// Count total
